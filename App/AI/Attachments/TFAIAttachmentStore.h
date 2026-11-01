@@ -14,3 +14,5 @@ NSDictionary *TFAIReadDirectoryReference(NSDictionary *entry,NSDictionary *argum
 
 // Local UI only. Caller balances security-scoped access; never include in model data.
 NSURL *TFAIDirectoryBrowserURL(NSDictionary *entry,NSError **error);
+
+void TFAIImportAttachmentURLs(NSArray<NSURL *> *urls,void(^completion)(NSArray *,NSError *));

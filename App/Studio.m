@@ -366,6 +366,8 @@ static NSString *GlobalOptimization(void){NSString *value=[NSUserDefaults.standa
  UIAlertController *a=[UIAlertController alertControllerWithTitle:@"选择偏好" message:nil preferredStyle:UIAlertControllerStyleActionSheet];for(NSUInteger n=0;n<choices.count;n++){NSString *value=choices[n];[a addAction:[UIAlertAction actionWithTitle:value style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){NSUserDefaults *u=NSUserDefaults.standardUserDefaults;if([key isEqual:@"StudioTheme"])[u setInteger:n forKey:key];else if([key isEqual:@"StudioFont"])[u setInteger:value.integerValue forKey:key];else [u setObject:value forKey:key];ApplyTheme(self);[self.tableView reloadData];}]];}[a addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];a.popoverPresentationController.sourceView=[t cellForRowAtIndexPath:visibleIndex];a.popoverPresentationController.sourceRect=[t cellForRowAtIndexPath:visibleIndex].bounds;[self presentViewController:a animated:YES completion:nil]; }
 
 @end
+UIViewController *TMCStudioSettingsController(void){return [[StudioSettings alloc]initWithStyle:UITableViewStyleInsetGrouped];}
+
 
 @class StudioEditor;
 static UIColor *FileColor(NSString *path) {

@@ -1,3 +1,4 @@
+#import "../App/AI/Actions/TFAISessionResources.h"
 #import <Foundation/Foundation.h>
 #import "../App/AI/Attachments/TFAIAttachmentStore.h"
 #import "../App/AI/Providers/TFAIProtocol.h"
@@ -34,4 +35,16 @@ e=nil;NSDictionary *binary=TFAIReadAttachmentReferences(refs,@{@"id":@"folder",@
 e=nil;Check(TFAIDirectoryBrowserURL(grant,&e)!=nil&&!e,@"local folder browser resolves active grant");
 e=nil;Check(TFAIRevokeDirectory(grant,&e)&&!e,@"directory grant explicitly revocable");e=nil;Check(!TFAIReadAttachmentReferences(refs,@{@"id":@"folder",@"action":@"list"},&e)&&e,@"revoked historical reference stops further reads");e=nil;Check(!TFAIResolveAttachments(@[grant],&e)&&e,@"revoked grant rejected before resend");e=nil;Check(!TFAIDirectoryBrowserURL(grant,&e)&&e,@"local folder browser rejects revoked grant");
 e=nil;Check(!TFAIReadAttachmentReferences(refs,@{@"id":@"folder",@"action":@"inspect",@"path":@"Sample.framework/Sample"},&e)&&e,@"revoked directory rejects binary staging");
+// External picker: retain valid siblings, report the actual failed filename.
+NSString *external=[root stringByAppendingPathComponent:@"external"];[fm createDirectoryAtPath:external withIntermediateDirectories:YES attributes:nil error:nil];
+[@"first file" writeToFile:[external stringByAppendingPathComponent:@"valid.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+[@"unsupported" writeToFile:[external stringByAppendingPathComponent:@"unknown.bin"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+NSString *oversizedPath=[external stringByAppendingPathComponent:@"large.txt"];[fm createFileAtPath:oversizedPath contents:nil attributes:nil];NSFileHandle *handle=[NSFileHandle fileHandleForWritingAtPath:oversizedPath];[handle truncateFileAtOffset:21*1024*1024];[handle closeFile];
+__block BOOL imported=NO;__block NSArray *importedEntries=nil;__block NSError *importFailure=nil;
+TFAIImportAttachmentURLs(@[[NSURL fileURLWithPath:[external stringByAppendingPathComponent:@"valid.txt"]],[NSURL fileURLWithPath:[external stringByAppendingPathComponent:@"unknown.bin"]],[NSURL fileURLWithPath:oversizedPath]],^(NSArray *entries,NSError *failure){imported=YES;importedEntries=entries;importFailure=failure;});
+NSDate *deadline=[NSDate dateWithTimeIntervalSinceNow:10];while(!imported&&deadline.timeIntervalSinceNow>0)[NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:.01]];
+Check(imported&&importedEntries.count==1,@"external import retains successful siblings");Check([importFailure.localizedDescription containsString:@"large.txt"]&&[importFailure.localizedDescription containsString:@"21.0 MB"],@"oversized import shows actual filename and size");Check([importFailure.localizedDescription containsString:@"unknown.bin"],@"unsupported type reported separately");Check(TFAIAttachmentLocalPath(importedEntries.firstObject,nil)!=nil,@"partial import retained file exists");
+imported=NO;TFAIImportAttachmentURLs(@[[NSURL fileURLWithPath:external]],^(NSArray *entries,NSError *failure){imported=YES;importedEntries=entries;importFailure=failure;});deadline=[NSDate dateWithTimeIntervalSinceNow:10];while(!imported&&deadline.timeIntervalSinceNow>0)[NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:.01]];
+Check(imported&&!importFailure&&[importedEntries.firstObject[@"kind"] isEqual:@"directory"],@"external folder grants directory without bulk upload");if(importedEntries.firstObject[@"directoryGrant"])TFAIRevokeDirectory(importedEntries.firstObject,nil);
+NSDictionary *resourceMessage=@{@"role":@"user",@"messageID":@"fixture-message",@"timestamp":@12345,@"attachments":@[@{@"path":@"sample.txt",@"preview":@"hello"}]};NSArray *resources=TFAISessionResourceIndex(@{@"messages":@[resourceMessage]},nil,nil,nil,nil);Check(resources.count==1&&[resources.firstObject[@"name"] isEqual:@"sample.txt"],@"shared UI and AI index lists attachment");Check([resources.firstObject[@"modified"] doubleValue]==12345&&[resources.firstObject[@"messageID"] isEqual:@"fixture-message"],@"shared resource preserves timestamp and message origin");
 [fm removeItemAtPath:root error:nil];printf("RESULT %d checks %d failures\n",total,failed);return failed?1:0;}}

@@ -27,9 +27,32 @@ NSArray *TFAIResolveAttachments(NSArray *entries,NSError **error){if(![entries i
 #endif
  }}else resolved=entry;
  if([resolved[@"kind"] isEqual:@"text"]&&resolved[@"localSnapshot"]){/* Only the manifest travels to the provider; tool reads stay bounded. */}else if([resolved[@"kind"] isEqual:@"text"]){if(![resolved[@"content"] isKindOfClass:NSString.class]||TFAIAttachmentSensitive(resolved[@"content"])){if(error)*error=Err(@"文本附件格式或内容不符");return nil;}NSUInteger actual=[resolved[@"content"] lengthOfBytesUsingEncoding:NSUTF8StringEncoding];textBytes+=actual;total+=actual;}else if([resolved[@"kind"] isEqual:@"image"]){NSData *imageData=[resolved[@"data"] isKindOfClass:NSString.class]?[[NSData alloc]initWithBase64EncodedString:resolved[@"data"] options:0]:nil;if(!imageData||imageData.length>2*1024*1024){if(error)*error=Err(@"图片附件数据无效或超过 2 MB");return nil;}total+=imageData.length;}else{if(error)*error=Err(@"附件格式不符");return nil;}if(textBytes>768*1024||total>4*1024*1024){if(error)*error=Err(@"将发送内容超过文本 768 KB 或总计 4 MB，请移除部分附件；内容未截断");return nil;}[out addObject:resolved];}return out;}
-#if __has_include(<UIKit/UIKit.h>)
-void TFAIImportAttachmentURLs(NSArray<NSURL *> *urls,void(^completion)(NSArray *,NSError *)){dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{NSMutableArray *out=[NSMutableArray new];__block NSError *failure=nil;if(urls.count>80)failure=Err(@"每次最多导入 80 个文件");NSUInteger total=0;for(NSURL *url in urls){if(failure)break;BOOL access=[url startAccessingSecurityScopedResource];NSFileCoordinator *coordinator=[[NSFileCoordinator alloc]initWithFilePresenter:nil];NSError *coordinationError=nil;__block BOOL accessed=NO;[coordinator coordinateReadingItemAtURL:url options:0 error:&coordinationError byAccessor:^(NSURL *safe){accessed=YES;NSDictionary *attrs=[NSFileManager.defaultManager attributesOfItemAtPath:safe.path error:&failure];if(![attrs[NSFileType] isEqual:NSFileTypeRegular]||[attrs[NSFileSize] unsignedLongLongValue]>20*1024*1024){failure=Err(@"请选择 20 MB 内的普通文件，文件夹仅通过软件内部浏览器选择");return;}NSData *data=[NSData dataWithContentsOfURL:safe options:0 error:&failure];if(data){NSDictionary *entry=Stage(data,safe.lastPathComponent,@"外部参考",&failure);if(entry)[out addObject:entry];}}];if(!failure)failure=coordinationError;if(!accessed&&!failure)failure=Err(@"文件提供商未返回可读取文件，请重新选择");if(access)[url stopAccessingSecurityScopedResource];total+=[out.lastObject[@"bytes"] unsignedIntegerValue];if(total>24*1024*1024)failure=Err(@"总导入量超过 24 MB，请减少选择");}if(failure){for(NSDictionary *entry in out){if(entry[@"directoryGrant"])TFAIRevokeDirectory(entry,nil);else [NSFileManager.defaultManager removeItemAtPath:[Store() stringByAppendingPathComponent:entry[@"storageName"]] error:nil];}[out removeAllObjects];}dispatch_async(dispatch_get_main_queue(),^{completion(out,failure);});});}
-#endif
+void TFAIImportAttachmentURLs(NSArray<NSURL *> *urls,void(^completion)(NSArray *,NSError *)){
+ dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
+ NSMutableArray *out=[NSMutableArray new],*errors=[NSMutableArray new];__block unsigned long long total=0;
+ if(urls.count>80){dispatch_async(dispatch_get_main_queue(),^{completion(@[],Err(@"每次最多导入 80 个文件，请减少选择后重试"));});return;}
+ for(NSURL *url in urls){@autoreleasepool{
+ BOOL access=[url startAccessingSecurityScopedResource];
+ NSFileCoordinator *coordinator=[[NSFileCoordinator alloc]initWithFilePresenter:nil];NSError *coordinationError=nil;__block NSError *failure=nil;__block BOOL accessed=NO;
+ [coordinator coordinateReadingItemAtURL:url options:0 error:&coordinationError byAccessor:^(NSURL *safe){
+ accessed=YES;NSDictionary *attrs=[NSFileManager.defaultManager attributesOfItemAtPath:safe.path error:&failure];if(!attrs)return;
+ if([attrs[NSFileType] isEqual:NSFileTypeDirectory]){NSDictionary *grant=TFAIAuthorizeDirectory(url,@"外部文件夹",&failure);if(grant)[out addObject:grant];return;}
+ if(![attrs[NSFileType] isEqual:NSFileTypeRegular]){failure=Err(@"所选项目不是普通文件或文件夹，请检查文件提供商是否已下载此项目");return;}
+ unsigned long long bytes=[attrs[NSFileSize] unsignedLongLongValue];NSUInteger cap=[Media(safe.lastPathComponent) isEqual:@"artifact"]?64*1024*1024:20*1024*1024;
+ if(!Media(safe.lastPathComponent)||Excluded(safe.lastPathComponent)){failure=Err(@"此类型请通过对应工具处理；压缩包请在会话文件中解压，IPA 请使用头文件导出。支持图片、文本、源码、deb 和 dylib");return;}
+ if(bytes>cap){failure=Err([NSString stringWithFormat:@"文件大小 %.1f MB，超过此类型本机导入上限 %.0f MB；可选择并授权所在文件夹，让 AI 按需读取",bytes/1024.0/1024,cap/1024.0/1024]);return;}
+ if(total+bytes>128*1024*1024){failure=Err(@"本批本机导入量超过 128 MB，请分批选择；已成功导入的文件保留");return;}
+ NSData *data=[NSData dataWithContentsOfURL:safe options:NSDataReadingMappedIfSafe error:&failure];
+ if(data){NSDictionary *entry=Stage(data,safe.lastPathComponent,@"外部参考",&failure);if(entry){[out addObject:entry];total+=bytes;}}
+ }];
+ if(!failure)failure=coordinationError;if(!accessed&&!failure)failure=Err(@"文件提供商尚未返回文件，请在“文件”App 下载后重试");
+ if(access)[url stopAccessingSecurityScopedResource];
+ if(failure)[errors addObject:[NSString stringWithFormat:@"%@：%@",url.lastPathComponent?:@"附件",failure.localizedDescription]];
+ }}
+ NSError *failure=errors.count?Err([NSString stringWithFormat:@"已导入 %lu 项，%lu 项未导入。\n%@",(unsigned long)out.count,(unsigned long)errors.count,[errors componentsJoinedByString:@"\n"]]):nil;
+ dispatch_async(dispatch_get_main_queue(),^{completion(out,failure);});
+ });
+}
 
 NSDictionary *TFAIReadAttachmentReferences(NSDictionary *references,NSDictionary *arguments,NSError **error){
  NSString *identifier=arguments[@"id"];NSDictionary *entry=[identifier isKindOfClass:NSString.class]?references[identifier]:nil;
