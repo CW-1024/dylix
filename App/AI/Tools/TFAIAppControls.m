@@ -1,0 +1,34 @@
+#import "TFAIAppControls.h"
+#import "../../SDKResources.h"
+#import <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+#import <UIKit/UIKit.h>
+#import "../Background/TFAIAudioBackground.h"
+#import "../Background/TFAIBackground.h"
+#endif
+static NSDictionary *Fields(void){return @{
+ @"theme":@{@"type":@"integer",@"enum":@[@0,@1,@2]},
+ @"editorFontSize":@{@"type":@"integer",@"enum":@[@12,@14,@16,@18,@20]},
+ @"optimization":@{@"type":@"string",@"enum":@[@"debug",@"release-size",@"release-speed",@"-O0",@"-O1",@"-O2",@"-O3",@"-Os",@"-Oz"]},
+ @"sdkVersion":@{@"type":@"string",@"enum":@[@"16.4",@"26.0"]},
+ @"deploymentTarget":@{@"type":@"string"},
+ @"exportDeb":@{@"type":@"boolean"},@"exportDylib":@{@"type":@"boolean"},
+ @"webEnabled":@{@"type":@"boolean"},@"audioBackgroundEnabled":@{@"type":@"boolean"}};}
+static NSDictionary *Keys(void){return @{@"theme":@"StudioTheme",@"editorFontSize":@"StudioFont",@"optimization":@"StudioOptimization",@"sdkVersion":@"StudioSDKVersion",@"deploymentTarget":@"StudioDeploymentTarget",@"exportDeb":@"StudioPackageEnabled",@"exportDylib":@"StudioExportDylib",@"webEnabled":@"TFAI.Web.Enabled",@"audioBackgroundEnabled":@"TFAI.Background.AudioEnabled"};}
+static BOOL ControlError(NSError **error,NSString *reason){if(error)*error=[NSError errorWithDomain:@"Dylix.AppControls" code:1 userInfo:@{NSLocalizedDescriptionKey:reason}];return NO;}
+NSArray *TFAIAppControlSchemas(BOOL readOnly){NSMutableArray *result=[NSMutableArray arrayWithObject:@{@"name":@"read_app_state",@"description":@"Discover actual app settings, editable fields, and tools currently available in THIS conversation. Never returns API keys. Call before changing settings; use project tools for per-project SDK/config/build/Git and attachment tools for granted folders.",@"parameters":@{@"type":@"object",@"properties":@{},@"additionalProperties":@NO}}];if(!readOnly)[result addObject:@{@"name":@"set_app_settings",@"description":@"Request user approval to update global Dylix settings and read back actual persisted values. theme:0 system/1 dark/2 light. sdkVersion and deploymentTarget change global defaults, not existing project overrides. Audio affects active background runs. Only declared fields are accepted; no arbitrary defaults or credentials.",@"parameters":@{@"type":@"object",@"properties":@{@"changes":@{@"type":@"object",@"properties":Fields(),@"minProperties":@1,@"additionalProperties":@NO}},@"required":@[@"changes"],@"additionalProperties":@NO}}];return result;}
+NSDictionary *TFAIAppState(void){NSUserDefaults *d=NSUserDefaults.standardUserDefaults;NSMutableDictionary *state=[@{@"theme":@0,@"editorFontSize":@14,@"optimization":@"release-speed",@"sdkVersion":@"16.4",@"deploymentTarget":@"15.0",@"exportDeb":@YES,@"exportDylib":@YES,@"webEnabled":@YES,@"audioBackgroundEnabled":@YES} mutableCopy];for(NSString *field in Keys()){id value=[d objectForKey:Keys()[field]];if(value)state[field]=value;}
+#if TARGET_OS_IPHONE
+ state[@"audioBackgroundEnabled"]=@(TFAIAudioBackgroundEnabled());
+#endif
+ return @{@"settings":state,@"editableSettings":Fields(),@"autoSave":@"always_on",@"targetArchitecture":@"arm64",@"availableSDKs":@[@"16.4",@"26.0"],@"userInteractionRequired":@[@"选择外部文件或目录并授予系统权限",@"输入或管理密钥",@"系统通知权限"],@"note":@"工具列表以当前会话 availableTools 为准；设置更改后会返回实际值。项目 SDK 覆盖全局默认值。"};}
+BOOL TFAIValidateAppSettings(NSDictionary *changes,NSError **error){if(![changes isKindOfClass:NSDictionary.class]||!changes.count||changes.count>Fields().count)return ControlError(error,@"请提供非空 changes 设置对象");for(NSString *key in changes){NSDictionary *field=Fields()[key];id value=changes[key];if(!field)return ControlError(error,[@"未知设置：" stringByAppendingString:key]);NSString *type=field[@"type"];BOOL valid=[type isEqual:@"string"]?[value isKindOfClass:NSString.class]:[value isKindOfClass:NSNumber.class];if(valid&&[type isEqual:@"boolean"])valid=CFGetTypeID((__bridge CFTypeRef)value)==CFBooleanGetTypeID();if(valid&&[type isEqual:@"integer"])valid=CFGetTypeID((__bridge CFTypeRef)value)!=CFBooleanGetTypeID()&&[value doubleValue]==[value integerValue];if(!valid||(field[@"enum"]&&![field[@"enum"] containsObject:value]))return ControlError(error,[@"设置值或类型无效：" stringByAppendingString:key]);}NSMutableDictionary *candidate=[TFAIAppState()[@"settings"] mutableCopy];[candidate addEntriesFromDictionary:changes];if(!TMCSDKBuildSettings(@{@"sdkVersion":candidate[@"sdkVersion"],@"deploymentTarget":candidate[@"deploymentTarget"]},NSUserDefaults.standardUserDefaults,error))return NO;return YES;}
+NSDictionary *TFAIApplyAppSettings(NSDictionary *changes,NSError **error){if(!TFAIValidateAppSettings(changes,error))return nil;NSUserDefaults *d=NSUserDefaults.standardUserDefaults;for(NSString *key in changes){
+#if TARGET_OS_IPHONE
+ if([key isEqual:@"audioBackgroundEnabled"]){TFAIBackgroundSetAudioEnabled([changes[key] boolValue]);continue;}
+#endif
+ [d setObject:changes[key] forKey:Keys()[key]];}
+#if TARGET_OS_IPHONE
+ NSCAssert(NSThread.isMainThread,@"Apply app settings on main thread");if(changes[@"theme"]){NSInteger theme=[d integerForKey:@"StudioTheme"];for(UIScene *scene in UIApplication.sharedApplication.connectedScenes)if([scene isKindOfClass:UIWindowScene.class])for(UIWindow *window in ((UIWindowScene *)scene).windows){UIUserInterfaceStyle style=theme==1?UIUserInterfaceStyleDark:theme==2?UIUserInterfaceStyleLight:UIUserInterfaceStyleUnspecified;window.overrideUserInterfaceStyle=style;NSMutableArray *pending=[NSMutableArray arrayWithObject:window.rootViewController?:[UIViewController new]];while(pending.count){UIViewController *vc=pending.lastObject;[pending removeLastObject];vc.overrideUserInterfaceStyle=style;[pending addObjectsFromArray:vc.childViewControllers];if(vc.presentedViewController)[pending addObject:vc.presentedViewController];}}}[[NSNotificationCenter defaultCenter] postNotificationName:@"DylixAppPreferencesChanged" object:nil];
+#endif
+ return TFAIAppState();}

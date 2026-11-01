@@ -7,7 +7,7 @@ int main(void){@autoreleasepool{
  NSDictionary *schema=@{@"name":@"classdump_headers",@"description":@"UNIQUE_TOOL_DESCRIPTION",@"parameters":@{@"type":@"object",@"required":@[@"job_id",@"action"],@"properties":@{@"action":@{@"type":@"string",@"enum":@[@"list",@"search",@"read"]},@"line_count":@{@"type":@"integer",@"maximum":@120}}}};
  NSArray *schemas=@[TFAIDevelopmentGuideSchema(),schema,@{@"name":@"web_read"}];
  NSString *a=TFAIDeveloperPrompt(ordinary,schemas);NSDictionary *snapshot=Snapshot(a);
- Check([snapshot[@"environment"] isEqual:ordinary],"environment preserved");Check([snapshot[@"availableTools"] isEqual:@[@"read_development_guide",@"classdump_headers",@"web_read"]],"only current tools advertised");Check([snapshot[@"promptVersion"] isEqual:@"3.0"],"versioned lean prompt");
+ Check([snapshot[@"environment"] isEqual:ordinary],"environment preserved");Check([snapshot[@"availableTools"] isEqual:@[@"read_development_guide",@"classdump_headers",@"web_read"]],"only current tools advertised");Check([snapshot[@"promptVersion"] isEqual:@"3.1"],"versioned lean prompt");
  Check(!snapshot[@"toolCatalog"]&&![a containsString:@"UNIQUE_TOOL_DESCRIPTION"]&&![a containsString:@"line_count"],"tool descriptions and parameters are not duplicated");
  Check([a containsString:@"未关联项目"]&&![a containsString:@"问答只读"],"ordinary scope is concise and accurate");
  NSString *ask=TFAIDeveloperPrompt(@{@"hasProject":@YES,@"mode":@"ask"},schemas);Check([ask containsString:@"问答只读"]&&![ask containsString:@"未关联项目"],"ask scope restricted");
