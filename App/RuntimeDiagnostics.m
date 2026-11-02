@@ -5,6 +5,46 @@
 static NSString *Hash(NSData *d){if(!d)return @"unavailable";unsigned char h[CC_SHA256_DIGEST_LENGTH];CC_SHA256(d.bytes,(CC_LONG)d.length,h);NSMutableString *s=[NSMutableString new];for(int i=0;i<sizeof(h);i++)[s appendFormat:@"%02x",h[i]];return s;}
 static BOOL Span(NSUInteger n,uint64_t off,uint64_t len){return off<=n&&len<=n-off;}
 NSString *TFResolvedOptimization(NSDictionary *c){NSString *v=c[@"optimization"]?:[NSUserDefaults.standardUserDefaults stringForKey:@"StudioOptimization"]?:@"release-speed";if([v isEqual:@"debug"])return @"-O0";if([v isEqual:@"release-size"])return @"-Os";if([v isEqual:@"release-speed"])return @"-O2";return [@[@"-O0",@"-O1",@"-O2",@"-O3",@"-Os",@"-Oz"] containsObject:v]?v:@"-O2";}
+BOOL TFShouldStripSymbols(NSDictionary *config){
+ NSString *policy=config[@"symbolPolicy"]?:[NSUserDefaults.standardUserDefaults stringForKey:@"StudioSymbolPolicy"]?:@"auto";
+ return [policy isEqual:@"auto"]&&![TFResolvedOptimization(config) isEqual:@"-O0"];
+}
+// Verify section identity before using full local symbols for a stripped image.
+static NSDictionary *RuntimeSections(NSData *data){
+ if(data.length<sizeof(struct mach_header_64))return nil;
+ const uint8_t *b=data.bytes;struct mach_header_64 h;memcpy(&h,b,sizeof(h));
+ if(h.magic!=MH_MAGIC_64||h.filetype!=MH_DYLIB||!Span(data.length,sizeof(h),h.sizeofcmds))return nil;
+ uint64_t off=sizeof(h),limit=sizeof(h)+h.sizeofcmds;NSMutableDictionary *out=[NSMutableDictionary new];
+ out[@"cpu"]=@[@(h.cputype),@(h.cpusubtype),@(h.flags)];
+ for(uint32_t i=0;i<h.ncmds;i++){
+  struct load_command lc;if(!Span(limit,off,sizeof(lc)))return nil;memcpy(&lc,b+off,sizeof(lc));
+  if(lc.cmdsize<sizeof(lc)||!Span(limit,off,lc.cmdsize))return nil;
+  if(lc.cmd==LC_SEGMENT_64){
+   struct segment_command_64 seg;if(lc.cmdsize<sizeof(seg))return nil;memcpy(&seg,b+off,sizeof(seg));
+   if(seg.nsects>(lc.cmdsize-sizeof(seg))/sizeof(struct section_64))return nil;
+   if(strncmp(seg.segname,"__LINKEDIT",16)!=0){
+    NSString *segment=[[NSString alloc]initWithBytes:seg.segname length:strnlen(seg.segname,16) encoding:NSUTF8StringEncoding];if(!segment)return nil;
+    out[[@"segment/" stringByAppendingString:segment]]=@[@(seg.vmaddr),@(seg.vmsize),@(seg.initprot),@(seg.maxprot)];
+    for(uint32_t j=0;j<seg.nsects;j++){
+     struct section_64 sec;memcpy(&sec,b+off+sizeof(seg)+j*sizeof(sec),sizeof(sec));
+     NSString *name=[[NSString alloc]initWithBytes:sec.sectname length:strnlen(sec.sectname,16) encoding:NSUTF8StringEncoding];if(!name)return nil;
+     BOOL zero=(sec.flags&SECTION_TYPE)==S_ZEROFILL||(sec.flags&SECTION_TYPE)==S_THREAD_LOCAL_ZEROFILL||(sec.flags&SECTION_TYPE)==S_GB_ZEROFILL;
+     if(!zero&&!Span(data.length,sec.offset,sec.size))return nil;
+     NSString *key=[NSString stringWithFormat:@"%@/%@",segment,name];if(out[key])return nil;
+     NSData *bytes=zero?NSData.data:[data subdataWithRange:NSMakeRange(sec.offset,(NSUInteger)sec.size)];
+     out[key]=@[@(sec.addr),@(sec.size),@(sec.flags),bytes];
+    }
+   }
+  }
+  off+=lc.cmdsize;
+ }
+ return out.count>1?out:nil;
+}
+NSDictionary *TFReleaseSymbolIndex(NSData *debug,NSData *release,NSError **error){
+ NSDictionary *a=RuntimeSections(debug),*b=RuntimeSections(release);NSDictionary *full=TFBinaryIndex(debug),*small=TFBinaryIndex(release);
+ if(!a||![a isEqual:b]||![full[@"uuid"] length]||![small[@"uuid"] length]){if(error)*error=[NSError errorWithDomain:@"Dylix.Symbols" code:1 userInfo:@{NSLocalizedDescriptionKey:@"发布裁剪后的代码、运行数据或异常展开段与完整副本不一致，已停止导出和打包。"}];return nil;}
+ NSMutableDictionary *index=[small mutableCopy];index[@"symbols"]=full[@"symbols"]?:@[];index[@"debugUUID"]=full[@"uuid"];index[@"debugSHA256"]=full[@"sha256"];index[@"runtimeSectionsVerified"]=@YES;return index;
+}
 NSDictionary *TFBinaryIndex(NSData *d){
  if(d.length<sizeof(struct mach_header_64))return @{};const uint8_t *b=d.bytes;struct mach_header_64 h;memcpy(&h,b,sizeof(h));if(h.magic!=MH_MAGIC_64||!Span(d.length,sizeof(h),h.sizeofcmds)||h.ncmds>10000)return @{};
  uint64_t off=sizeof(h),base=UINT64_MAX;NSString *uuid=@"";struct symtab_command st={0};NSMutableIndexSet *codeSections=[NSMutableIndexSet new];NSUInteger sectionID=0;NSMutableDictionary *sectionEnds=[NSMutableDictionary new];
@@ -17,7 +57,7 @@ NSDictionary *TFBinaryIndex(NSData *d){
  [symbols sortUsingComparator:^NSComparisonResult(NSDictionary *a,NSDictionary *b){return [a[@"offset"] compare:b[@"offset"]];}];return @{@"uuid":uuid,@"sha256":Hash(d),@"bytes":@(d.length),@"symbols":symbols,@"symbolication":@"nearest text symbol; no source-line inference"};
 }
 NSDictionary *TFBuildProvenance(NSString *root,NSArray *sources,NSDictionary *config,NSString *build){NSMutableArray *inputs=[NSMutableArray new];NSDirectoryEnumerator *en=[NSFileManager.defaultManager enumeratorAtPath:root];NSUInteger count=0;for(NSString *f in en){if([f hasPrefix:@"."]||[f containsString:@"/."]){[en skipDescendants];continue;}if(![@[@"m",@"mm",@"h",@"hpp",@"c",@"cc",@"cpp",@"x",@"xm",@"plist",@"json"] containsObject:f.pathExtension]&&![@[@"Makefile",@"control"] containsObject:f.lastPathComponent])continue;NSString *p=[root stringByAppendingPathComponent:f];if(![[p stringByResolvingSymlinksInPath] hasPrefix:[[root stringByResolvingSymlinksInPath] stringByAppendingString:@"/"]])continue;NSDictionary *a=[NSFileManager.defaultManager attributesOfItemAtPath:p error:nil];if(a.fileSize>16*1024*1024)continue;[inputs addObject:@{@"file":f,@"sha256":Hash([NSData dataWithContentsOfFile:p]),@"bytes":@(a.fileSize)}];if(++count>=5000)break;}
- return @{@"schema":@1,@"buildID":build.lastPathComponent,@"compiler":@"embedded Clang / LLVM 14",@"sdk":[NSString stringWithFormat:@"iPhoneOS %@ (embedded)",config[@"sdkVersion"]?:[NSUserDefaults.standardUserDefaults stringForKey:@"StudioSDKVersion"]?:@"16.4"],@"optimization":TFResolvedOptimization(config),@"profile":config[@"optimization"]?:[NSUserDefaults.standardUserDefaults stringForKey:@"StudioOptimization"]?:@"release-speed",@"effectiveConfiguration":config,@"compiledSources":sources,@"inputs":inputs,@"runtimeVerification":@"未验证：构建通过仅代表编译、链接和打包完成"};}
+ return @{@"schema":@1,@"buildID":build.lastPathComponent,@"compiler":@"embedded Clang / LLVM 14",@"sdk":[NSString stringWithFormat:@"iPhoneOS %@ (embedded)",config[@"sdkVersion"]?:[NSUserDefaults.standardUserDefaults stringForKey:@"StudioSDKVersion"]?:@"16.4"],@"optimization":TFResolvedOptimization(config),@"profile":config[@"optimization"]?:[NSUserDefaults.standardUserDefaults stringForKey:@"StudioOptimization"]?:@"release-speed",@"symbolPolicy":config[@"symbolPolicy"]?:[NSUserDefaults.standardUserDefaults stringForKey:@"StudioSymbolPolicy"]?:@"auto",@"stripSymbols":@(TFShouldStripSymbols(config)),@"effectiveConfiguration":config,@"compiledSources":sources,@"inputs":inputs,@"runtimeVerification":@"未验证：构建通过仅代表编译、链接和打包完成"};}
 NSArray *TFRuntimeRisks(NSString *root){NSMutableArray *out=[NSMutableArray new];NSDirectoryEnumerator *en=[NSFileManager.defaultManager enumeratorAtPath:root];NSUInteger examined=0;for(NSString *f in en){if([f hasPrefix:@"."]||[f containsString:@"/."]){[en skipDescendants];continue;}if(![@[@"m",@"mm",@"xm",@"x",@"h"] containsObject:f.pathExtension])continue;NSString *p=[root stringByAppendingPathComponent:f];if(![[p stringByResolvingSymlinksInPath] hasPrefix:[[root stringByResolvingSymlinksInPath] stringByAppendingString:@"/"]])continue;NSDictionary *a=[NSFileManager.defaultManager attributesOfItemAtPath:p error:nil];if(a.fileSize>2*1024*1024)continue;NSString *s=[NSString stringWithContentsOfFile:p encoding:NSUTF8StringEncoding error:nil];if(!s)continue;
  // Mask comments while preserving byte-independent NSString positions and newlines.
  NSMutableString *clean=[s mutableCopy];NSUInteger state=0;BOOL escape=NO;

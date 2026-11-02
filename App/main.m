@@ -122,6 +122,7 @@ static NSString *projectPath(NSString *root, NSString *relative) {
     NSString *path = [root stringByAppendingPathComponent:relative].stringByStandardizingPath;
     return [path hasPrefix:[base stringByAppendingString:@"/"]] ? path : nil;
 }
+#include "SymbolProcessing.inc"
 static NSDictionary *projectConfig(NSString *root) {
     NSData *data = [NSData dataWithContentsOfFile:[root stringByAppendingPathComponent:@"MobileCompiler.json"]];
     id value = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
@@ -531,6 +532,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
     for(NSString *file in [NSFileManager.defaultManager contentsOfDirectoryAtPath:self.lastBuild error:nil])if([file hasPrefix:@"logos-"]&&[@[@"m",@"mm"] containsObject:file.pathExtension])[exportNames addObject:file];
     id exportReport=[NSJSONSerialization JSONObjectWithData:[NSData dataWithContentsOfFile:[self.lastBuild stringByAppendingPathComponent:@"report.json"]]?:[NSData data] options:0 error:nil];
     if([exportReport isKindOfClass:NSDictionary.class]&&[exportReport[@"namedArtifacts"] isKindOfClass:NSArray.class])[exportNames addObjectsFromArray:exportReport[@"namedArtifacts"]];else [exportNames addObjectsFromArray:@[@"MobileTweak.deb",@"Smoke.dylib"]];
+    for(NSDictionary *entry in exportReport[@"symbolProcessing"])if([entry[@"debugFile"] isKindOfClass:NSString.class])[exportNames addObject:entry[@"debugFile"]];
     for (NSString *name in exportNames) {
         NSString *path = [self.lastBuild stringByAppendingPathComponent:name];
         if (path && [NSFileManager.defaultManager fileExistsAtPath:path]) [files addObject:[NSURL fileURLWithPath:path]];
@@ -684,6 +686,10 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
             NSString *language = objc ? (cpp ? @"objective-c++" : @"objective-c") : (cpp ? @"c++" : @"c");
             NSString *object = [build stringByAppendingPathComponent:[NSString stringWithFormat:@"source-%03lu.o", (unsigned long)index]];
             NSMutableArray *arguments = [@[@"clang", @"-cc1", @"-fdiagnostics-parseable-fixits", @"-triple",  [NSString stringWithFormat:@"%@-apple-ios%@",cpu,minimum], @"-emit-obj", @"-target-cpu", [cpu isEqual:@"arm64e"]?@"apple-a12":@"apple-a7", @"-target-feature", @"+neon", @"-target-feature", @"+fp-armv8", @"-target-abi", @"darwinpcs", @"-fgnuc-version=4.2.1", @"-mrelocation-model", @"pic", @"-pic-level", @"2", @"-fblocks", @"-isysroot", sdk, @"-internal-isystem", headers, @"-internal-isystem", [sdk stringByAppendingPathComponent:@"usr/include"], @"-I", include, @"-I", projectDirectory, @"-F", [sdk stringByAppendingPathComponent:@"System/Library/Frameworks"]] mutableCopy];
+            // Direct cc1 calls bypass Darwin driver defaults. Without a frame
+            // pointer, ARM64 EH falls back to DWARF FDEs that bundled LLD 14
+            // misrelocates. Preserve exceptions and emit normal Darwin unwind.
+            [arguments addObjectsFromArray:@[@"-mframe-pointer=non-leaf", @"-funwind-tables=1"]];
             // SDK 26 target autodetection differs from embedded Clang 14. Declare
             // our actual iOS device platform explicitly. SubFrameworks holds
             // UIUtilities headers imported by the SDK's UIKit public headers.
@@ -706,7 +712,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
             if(!cpp&&[cStandards containsObject:config[@"cStandard"]])[arguments addObject:[@"-std=" stringByAppendingString:config[@"cStandard"]]];
             if (cpp) {
                 NSArray *standards=@[@"c++98",@"gnu++98",@"c++11",@"gnu++11",@"c++14",@"gnu++14",@"c++17",@"gnu++17",@"c++20",@"gnu++20"];
-                NSString *standard=[standards containsObject:config[@"cxxStandard"]]?config[@"cxxStandard"]:@"c++17";
+                NSString *standard=[standards containsObject:config[@"cxxStandard"]]?config[@"cxxStandard"]:@"gnu++17";
                 [arguments addObjectsFromArray:@[[@"-std=" stringByAppendingString:standard], @"-fcxx-exceptions", @"-fexceptions"]];
                 [arguments insertObjects:@[@"-internal-isystem", [cppSDK stringByAppendingPathComponent:@"usr/include/c++/v1"]] atIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(2, 2)]];
             }
@@ -743,7 +749,11 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         // LLVM 14 LLD accepts -arch arm64e but emits ARM64_ALL. Reject it before packaging.
         if(!compileFailed&&[cpu isEqual:@"arm64e"]){NSData *linked=[NSData dataWithContentsOfFile:[build stringByAppendingPathComponent:dylibName]];struct mach_header_64 mh={0};if(linked.length>=sizeof(mh))[linked getBytes:&mh length:sizeof(mh)];if((mh.cpusubtype&0xffffff)!=2){compileFailed=YES;TMCLog(log,"error: 当前内嵌 LLVM 14 链接器将 arm64e 输出为 arm64，已停止打包。请在项目设置选择 arm64；iphoneos-arm64e 隐根包可使用 arm64 动态库。真正 arm64e ABI 需要更新链接器。\n");[NSFileManager.defaultManager removeItemAtPath:[build stringByAppendingPathComponent:dylibName] error:nil];}}
         BOOL toolSuccess = !compileFailed && projectSources.count > 0 && results.count == commands.count && [results.lastObject[@"exit"] intValue] == 0;
+        NSMutableDictionary *releaseIndexes=[NSMutableDictionary new];NSMutableArray *symbolProcessing=[NSMutableArray new];NSError *symbolError=nil;
+        BOOL stripSymbols=TFShouldStripSymbols(config);
+        if(toolSuccess&&stripSymbols){toolSuccess=TMCProcessReleaseSymbols(link,dylibName,packageScheme,build,input,log,releaseIndexes,symbolProcessing,&symbolError);if(!toolSuccess)[NSFileManager.defaultManager removeItemAtPath:[build stringByAppendingPathComponent:dylibName] error:nil];}
         NSMutableDictionary *report = [@{@"execution": @"embedded iOS frameworks", @"commands": results, @"logos":logosResults, @"sourceCount":@(projectSources.count), @"success":@NO, @"projectName":tweakName,@"packageScheme":packageScheme,@"cpuArchitecture":cpu,@"sdkVersion":sdkVersion,@"deploymentTarget":minimum} mutableCopy];
+        report[@"stripSymbols"]=@(stripSymbols);report[@"symbolProcessing"]=symbolProcessing;if(symbolError)report[@"packageError"]=symbolError.localizedDescription;
         NSMutableArray *artifacts = [NSMutableArray arrayWithObject:dylibName];
         for (NSString *object in objects) [artifacts addObject:object.lastPathComponent];
         for (NSString *name in artifacts) {
@@ -763,10 +773,12 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
             if(![scheme isEqual:packageScheme]){NSString *cache=[build stringByAppendingPathComponent:@".package-link-cache"];[NSFileManager.defaultManager createDirectoryAtPath:cache withIntermediateDirectories:YES attributes:nil error:nil];variantDylib=[@".package-link-cache" stringByAppendingPathComponent:[scheme stringByAppendingPathExtension:@"dylib"]];}else variantDylib=dylibName;
             if(!variantDylib||!variantDeb){allPassed=NO;report[@"outputNamingError"]=error.localizedDescription?:@"文件名无效";break;}
             TMCLog(log,"\n打包目标：%s\n",scheme.UTF8String);
-            if(![scheme isEqual:packageScheme]){NSMutableArray *variantLink=[link mutableCopy];NSUInteger pathIndex=[variantLink indexOfObject:@"-rpath"],installIndex=[variantLink indexOfObject:@"-install_name"],outputIndex=[variantLink indexOfObject:@"-o"];
+            NSMutableArray *variantLink=[link mutableCopy];
+            if(![scheme isEqual:packageScheme]){NSUInteger pathIndex=[variantLink indexOfObject:@"-rpath"],installIndex=[variantLink indexOfObject:@"-install_name"],outputIndex=[variantLink indexOfObject:@"-o"];
              variantLink[pathIndex+1]=[scheme isEqual:@"rootless"]?@"/var/jb/Library/Frameworks":[scheme isEqual:@"roothide"]?@"@loader_path/.jbroot/Library/Frameworks":@"/Library/Frameworks";
              variantLink[installIndex+1]=[NSString stringWithFormat:[scheme isEqual:@"roothide"]?@"@loader_path/.jbroot/Library/MobileSubstrate/DynamicLibraries/%@.dylib":@"@rpath/%@.dylib",tweakName];variantLink[outputIndex+1]=[build stringByAppendingPathComponent:variantDylib];
              TMCLog(log,"$ %s\n",[variantLink componentsJoinedByString:@" "].UTF8String);int status=runTool(variantLink,input,log);TMCLog(log,"exit=%d\n",status);[results addObject:@{@"command":[variantLink componentsJoinedByString:@" "],@"exit":@(status),@"stage":[@"link-" stringByAppendingString:scheme],@"source":@"all objects"}];if(status){allPassed=NO;report[@"packageError"]=[@"链接失败：" stringByAppendingString:scheme];break;}}
+            if(![scheme isEqual:packageScheme]&&stripSymbols&&!TMCProcessReleaseSymbols(variantLink,variantDylib,scheme,build,input,log,releaseIndexes,symbolProcessing,&error)){allPassed=NO;report[@"packageError"]=error.localizedDescription?:@"发布裁剪失败";[NSFileManager.defaultManager removeItemAtPath:[build stringByAppendingPathComponent:variantDylib] error:nil];break;}
             NSData *dylib=[NSData dataWithContentsOfFile:[build stringByAppendingPathComponent:variantDylib]];if(dylib&&[scheme isEqual:packageScheme])[namedArtifacts addObject:variantDylib];NSData *deb=nil;
             if(!customMetadata)deb=TMCDebPackageForProject(dylib,tweakName,@"com.example.target",scheme,projectDirectory,config,&error);
             else if(hasControl&&projectPlists.count==1){NSString *control=[NSString stringWithContentsOfFile:controlPath encoding:NSUTF8StringEncoding error:&error];NSData *filter=[NSData dataWithContentsOfFile:[projectDirectory stringByAppendingPathComponent:projectPlists.firstObject] options:0 error:&error];if(control&&filter){NSString *adjusted=TMCControlForScheme(control,scheme);deb=TMCDebPackageWithResources(dylib,tweakName,filter,adjusted,projectDirectory,scheme,config,&error);[adjusted writeToFile:[build stringByAppendingPathComponent:multipleSchemes?[@"control-" stringByAppendingString:scheme]:@"control"] atomically:YES encoding:NSUTF8StringEncoding error:nil];[filter writeToFile:[build stringByAppendingPathComponent:@"filter.plist"] atomically:YES];}}
@@ -784,7 +796,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         NSMutableArray *symbolImages=[NSMutableArray new];
         NSMutableOrderedSet *imagePaths=[NSMutableOrderedSet orderedSetWithObject:dylibName];
         for(NSDictionary *variant in variantReports)if(variant[@"dylib"])[imagePaths addObject:variant[@"dylib"]];
-        for(NSString *imagePath in imagePaths){NSMutableDictionary *index=[TFBinaryIndex([NSData dataWithContentsOfFile:[build stringByAppendingPathComponent:imagePath]]) mutableCopy];if([index[@"uuid"] length]){index[@"file"]=imagePath;[symbolImages addObject:index];}}
+        for(NSString *imagePath in imagePaths){NSMutableDictionary *index=[(releaseIndexes[imagePath]?:TFBinaryIndex([NSData dataWithContentsOfFile:[build stringByAppendingPathComponent:imagePath]])) mutableCopy];if([index[@"uuid"] length]){index[@"file"]=imagePath;[symbolImages addObject:index];}}
         report[@"binaryImages"]=symbolImages;
         NSData *symbolData=[NSJSONSerialization dataWithJSONObject:@{@"schema":@1,@"images":symbolImages,@"provenance":report[@"provenance"]} options:NSJSONWritingPrettyPrinted error:nil];
         [symbolData writeToFile:[build stringByAppendingPathComponent:@"symbols.json"] atomically:YES];
@@ -844,6 +856,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
     extern UIViewController *TFAIRender122Regression(void);
     if([NSProcessInfo.processInfo.arguments containsObject:@"--ai-render122-test"])
         self.window.rootViewController=[[TMCNavigationController alloc]initWithRootViewController:TFAIRender122Regression()];
+    else if([NSProcessInfo.processInfo.arguments containsObject:@"--ai-share144-test"]){extern UIViewController *TFAIShare144Regression(void);self.window.rootViewController=TFAIShare144Regression();}
     else if([NSProcessInfo.processInfo.arguments containsObject:@"--ai-share114-test"])
         self.window.rootViewController=TFAIShare114Regression();
     else if([NSProcessInfo.processInfo.arguments containsObject:@"--ai-audio110-test"])

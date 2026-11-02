@@ -56,11 +56,23 @@ static NSMutableDictionary *Normalize(id obj,NSString *scope){
 }
 static NSDictionary *MakeSummary(NSDictionary *record,NSString *scope){
  NSMutableDictionary *summary=[NSMutableDictionary new];for(NSString *key in @[@"id",@"title",@"updatedAt",@"createdAt",@"pinned",@"projectName",@"projectRoot",@"associatedProjectID",@"state",@"mode"]){id v=record[key];if(v)summary[key]=v;}
+ if([summary[@"title"] hasSuffix:@" · 编辑前"]){NSString *title=summary[@"title"];summary[@"title"]=[@"[编辑前备份] " stringByAppendingString:[title substringToIndex:title.length-6]];}
  summary[@"storageProjectID"]=scope;summary[@"schemaVersion"]=@2;summary[@"messageCount"]=@([record[@"messages"] count]);
  NSString *preview=@"尚未发送消息";for(NSDictionary *m in [record[@"messages"] reverseObjectEnumerator])if([m isKindOfClass:NSDictionary.class]&&[@[@"assistant",@"user"] containsObject:m[@"role"]]&&[m[@"content"] isKindOfClass:NSString.class]&&[m[@"content"] length]){preview=m[@"content"];NSRange context=[preview rangeOfString:@"<project_context>"];if(context.location!=NSNotFound)preview=[preview substringToIndex:context.location];break;}
  preview=[[preview componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] componentsJoinedByString:@" "];if(preview.length>180)preview=[preview substringToIndex:180];summary[@"summary"]=preview;return summary;
 }
-static NSArray *Sorted(NSArray *items){return [items sortedArrayUsingComparator:^NSComparisonResult(NSDictionary *a,NSDictionary *b){BOOL ap=[a[@"pinned"] boolValue],bp=[b[@"pinned"] boolValue];if(ap!=bp)return ap?NSOrderedAscending:NSOrderedDescending;return [b[@"updatedAt"] compare:a[@"updatedAt"]];}];}
+// Opening, drafts, folding and migration of UI message IDs are not conversation activity.
+static NSArray *ActivityMessages(id messages){
+ NSMutableArray *out=[NSMutableArray new];
+ for(id raw in [messages isKindOfClass:NSArray.class]?messages:@[]){
+  if(![raw isKindOfClass:NSDictionary.class])continue;
+  NSMutableDictionary *m=[raw mutableCopy];
+  for(NSString *key in @[@"messageID",@"timestamp",@"streaming",@"expanded",@"renderBlocks",@"display"])[m removeObjectForKey:key];
+  [out addObject:m];
+ }
+ return out;
+}
+static NSArray *Sorted(NSArray *items){return [items sortedArrayUsingComparator:^NSComparisonResult(NSDictionary *a,NSDictionary *b){BOOL ap=[a[@"pinned"] boolValue],bp=[b[@"pinned"] boolValue];if(ap!=bp)return ap?NSOrderedAscending:NSOrderedDescending;NSComparisonResult order=[b[@"updatedAt"] compare:a[@"updatedAt"]];return order!=NSOrderedSame?order:[a[@"id"] compare:b[@"id"]];}];}
 @implementation TFAISessions
 + (NSArray<NSDictionary *> *)sessions:(NSString *)projectID {
  @synchronized(self){NSMutableArray *records=[NSMutableArray new];for(NSDictionary *summary in [self summaries:projectID]){NSDictionary *record=[self loadSession:summary[@"id"] project:projectID];if(record)[records addObject:record];}return records;}
@@ -70,10 +82,14 @@ static NSArray *Sorted(NSArray *items){return [items sortedArrayUsingComparator:
  [self save:record project:projectID error:nil];return record;
 }
 + (BOOL)save:(NSDictionary *)session project:(NSString *)projectID error:(NSError **)error {
- @synchronized(self){NSString *path=SessionPath(projectID,session[@"id"]);if(!path||![session[@"messages"] isKindOfClass:NSArray.class]){if(error)*error=AIStoreError(@"会话标识或消息格式有误");return NO;}
+ @synchronized(self){
+ NSString *storedScope=session[@"storageProjectID"];
+ if(storedScope.length&&![storedScope isEqual:projectID]){if(error)*error=AIStoreError(@"会话存储位置与原记录不一致，请从会话列表重新打开；原记录已保留");return NO;}
+ NSString *path=SessionPath(projectID,session[@"id"]);if(!path||![session[@"messages"] isKindOfClass:NSArray.class]){if(error)*error=AIStoreError(@"会话标识或消息格式有误");return NO;}
  if([NSFileManager.defaultManager fileExistsAtPath:Tombstone(projectID,session[@"id"])]){if(error)*error=AIStoreError(@"会话已删除，请创建新会话；旧回调不会恢复删除记录");return NO;}
  NSMutableDictionary *safe=[session mutableCopy];NSDictionary *existing=ReadJSON(path);if([existing isKindOfClass:NSDictionary.class]&&[existing[@"metadataRevision"] unsignedLongLongValue]>[safe[@"metadataRevision"] unsignedLongLongValue]){for(NSString *key in @[@"title",@"pinned",@"projectName",@"projectRoot",@"associatedProjectID",@"metadataRevision"]){if(existing[key])safe[key]=existing[key];else[safe removeObjectForKey:key];}}
- safe[@"schemaVersion"]=@2;safe[@"storageProjectID"]=projectID;safe[@"updatedAt"]=@(NSDate.date.timeIntervalSince1970);
+ safe[@"schemaVersion"]=@2;safe[@"storageProjectID"]=projectID;NSArray *previousMessages=Normalize(existing,projectID)[@"messages"]?:existing[@"messages"];BOOL changed=existing&&![ActivityMessages(previousMessages) isEqual:ActivityMessages(safe[@"messages"])];
+ safe[@"updatedAt"]=changed?@(NSDate.date.timeIntervalSince1970):(existing[@"updatedAt"]?:safe[@"updatedAt"]?:safe[@"createdAt"]?:@(NSDate.date.timeIntervalSince1970));
  for(NSString *key in @[@"grants",@"approval",@"apiKey",@"secret",@"Authorization"])[safe removeObjectForKey:key];
  NSData *data=[NSJSONSerialization dataWithJSONObject:safe options:0 error:error];if(!data)return NO;if(data.length>32*1024*1024){if(error)*error=AIStoreError(@"会话已超过 32 MB，请新建会话");return NO;}
  if(!WriteJSON(safe,path,error))return NO;
@@ -120,7 +136,7 @@ static NSArray *Sorted(NSArray *items){return [items sortedArrayUsingComparator:
  @synchronized(self){NSMutableArray *all=[NSMutableArray new];NSString *base=[AIStoreRoot(@"general") stringByDeletingLastPathComponent];NSArray *scopes=scope?@[scope]:[NSFileManager.defaultManager contentsOfDirectoryAtPath:base error:nil];
  for(NSString *project in scopes){NSString *root=AIStoreRoot(project);if(!root)continue;for(NSString *file in [NSFileManager.defaultManager contentsOfDirectoryAtPath:root error:nil]){if(![file.pathExtension isEqual:@"json"])continue;NSString *identifier=file.stringByDeletingPathExtension;if(!AIIdentifier(identifier)||[NSFileManager.defaultManager fileExistsAtPath:Tombstone(project,identifier)])continue;NSString *payload=[root stringByAppendingPathComponent:file],*index=SummaryPath(project,identifier);NSDictionary *payloadAttrs=[NSFileManager.defaultManager attributesOfItemAtPath:payload error:nil],*indexAttrs=[NSFileManager.defaultManager attributesOfItemAtPath:index error:nil];id summary=nil;if(indexAttrs&&[indexAttrs[NSFileModificationDate] compare:payloadAttrs[NSFileModificationDate]]!=NSOrderedAscending)summary=ReadJSON(index);
  if(![summary isKindOfClass:NSDictionary.class]||![summary[@"schemaVersion"] isEqual:@2]||![summary[@"id"] isEqual:identifier]||![summary[@"updatedAt"] isKindOfClass:NSNumber.class]||![summary[@"title"] isKindOfClass:NSString.class]){NSDictionary *record=Normalize(ReadJSON(payload),project);if(!record)continue;summary=MakeSummary(record,project);WriteJSON(summary,index,nil);}
- NSMutableDictionary *display=[summary mutableCopy];if(!TFAISessionHasLiveRun(project,identifier)&&[@[@"streaming",@"waitingApproval",@"running"] containsObject:display[@"state"]])display[@"state"]=@"interrupted";[all addObject:display];}}
+ NSMutableDictionary *display=[summary mutableCopy];NSString *displayTitle=display[@"title"];if([displayTitle hasSuffix:@" · 编辑前"])display[@"title"]=[@"[编辑前备份] " stringByAppendingString:[displayTitle substringToIndex:displayTitle.length-6]];if(!TFAISessionHasLiveRun(project,identifier)&&[@[@"streaming",@"waitingApproval",@"running"] containsObject:display[@"state"]])display[@"state"]=@"interrupted";[all addObject:display];}}
  return Sorted(all);}
 }
 + (BOOL)saveMetadata:(NSDictionary *)metadata identifier:(NSString *)identifier project:(NSString *)scope error:(NSError **)error {

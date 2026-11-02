@@ -81,7 +81,7 @@ if args.profile:
 info = {
     'CFBundleExecutable': 'TheosMobileCompiler', 'CFBundleIdentifier': 'com.xuegao.theosmobilecompiler',
     'CFBundleName': 'Dylix', 'CFBundleDisplayName': 'Dylix',
-    'NSCameraUsageDescription': '拍摄照片作为您选择发送给模型的参考附件。', 'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': '1.0.5', 'CFBundleVersion': '140',
+    'NSCameraUsageDescription': '拍摄照片作为您选择发送给模型的参考附件。', 'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': '1.0.5', 'CFBundleVersion': '146',
     'CFBundleDocumentTypes': [{'CFBundleTypeName':'Dylix Files','CFBundleTypeRole':'Editor','LSHandlerRank':'Alternate','LSItemContentTypes':['public.data','public.archive','public.source-code']}],
     'CFBundleURLTypes': [{'CFBundleURLName':'Dylix Incoming','CFBundleURLSchemes':['dylix', 'tweakforge']}],
     'BGTaskSchedulerPermittedIdentifiers': ['com.xuegao.theosmobilecompiler.ai.processing'],
@@ -95,11 +95,20 @@ info = {
     'CFBundleSupportedPlatforms': ['iPhoneSimulator' if args.simulator else 'iPhoneOS'],
 }
 icon_info = ROOT / 'build' / platform / 'icons-info.plist'
-subprocess.run(['xcrun', 'actool', '--compile', str(app), '--platform', sdk,
+asset_result = subprocess.run(['xcrun', 'actool', '--compile', str(app), '--platform', sdk,
                 '--minimum-deployment-target', '15.0', '--app-icon', 'AppIcon',
                 '--target-device', 'iphone', '--target-device', 'ipad',
                 '--output-partial-info-plist', str(icon_info),
-                str(ROOT / 'Resources/Assets.xcassets')], check=True)
+                str(ROOT / 'Resources/Assets.xcassets')])
+if asset_result.returncode:
+    previous_ipa = ROOT / 'build' / f"Dylix-1.0.5-build141-unsigned.ipa"
+    catalog = ROOT / 'Resources/Assets.xcassets'
+    newest_asset = max((p.stat().st_mtime for p in catalog.rglob('*') if p.is_file()), default=0)
+    if not previous_ipa.exists() or previous_ipa.stat().st_mtime < newest_asset or not icon_info.exists():
+        raise SystemExit('Asset catalog compilation failed and no current packaged assets are available')
+    with zipfile.ZipFile(previous_ipa) as previous:
+        (app / 'Assets.car').write_bytes(previous.read('Payload/TheosMobileCompiler.app/Assets.car'))
+    print('actool failed; reused unchanged Assets.car from the previous IPA', flush=True)
 info.update(plistlib.loads(icon_info.read_bytes()))
 (app / 'Info.plist').write_bytes(plistlib.dumps(info))
 sysroot = str(args.sdk_root.resolve()) if args.sdk_root else subprocess.check_output(['xcrun', '--sdk', sdk, '--show-sdk-path'], text=True).strip()

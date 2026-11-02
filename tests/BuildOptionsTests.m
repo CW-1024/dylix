@@ -3,6 +3,8 @@
 int main(void){@autoreleasepool{
  NSUserDefaults *u=[[NSUserDefaults alloc] initWithSuiteName:@"local.tmc.options.tests"];[u removePersistentDomainForName:@"local.tmc.options.tests"];
  NSDictionary *d=TMCEffectiveBuildOptions(@{},u);NSCAssert([d[@"package"] boolValue]&&[d[@"packageSchemes"] isEqual:@[@"rootless"]],@"factory defaults");
+ NSCAssert([d[@"cxxStandard"] isEqual:@"gnu++17"],@"GNU C++17 default");
+ NSCAssert([TMCEffectiveBuildOptions(@{@"cxxStandard":@"c++17"},u)[@"cxxStandard"] isEqual:@"c++17"],@"project C++ standard override");
  [u setBool:NO forKey:@"StudioPackageEnabled"];[u setObject:@[@"rootless",@"rootful",@"roothide"] forKey:@"StudioPackageSchemes"];[u setObject:@"Global-{name}" forKey:@"StudioOutputPattern-deb"];
  d=TMCEffectiveBuildOptions(@{},u);NSCAssert(![d[@"package"] boolValue]&&[d[@"packageSchemes"] count]==3&&[d[@"outputPattern-deb"] isEqual:@"Global-{name}"],@"inherit all global defaults");
  d=TMCEffectiveBuildOptions(@{@"package":@YES,@"packageSchemes":@[@"roothide"],@"outputPattern-deb":@"Local-{version}"},u);NSCAssert([d[@"package"] boolValue]&&[d[@"packageSchemes"] isEqual:@[@"roothide"]]&&[d[@"outputPattern-deb"] isEqual:@"Local-{version}"],@"project overrides independent");
