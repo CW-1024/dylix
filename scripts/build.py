@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import zipfile
 import hashlib
+import gzip
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
@@ -69,7 +70,7 @@ resource_headers = ROOT / 'Resources/ClangInclude'
 shutil.copytree(resource_headers, app / 'ClangInclude', dirs_exist_ok=True)
 perl_config = (ROOT / 'Resources/Perl/Config.pm').read_text()
 assert '$^V eq 5.34.0' in perl_config and "dlsrc => 'dl_none.xs'" in perl_config, 'Expected iOS Perl 5.34.0 modules'
-resources = ['CompatibilityRules', 'ThirdPartyNotices', 'GitHelp', 'HelpArticles', 'Editor', 'GitDiff', 'logos', 'Include', 'Perl', 'SampleProject', 'SampleObjectiveC', 'SampleMultiProject', 'VendorFrameworks']
+resources = ['CompatibilityRules', 'ThirdPartyNotices', 'GitHelp', 'HelpArticles', 'Editor', 'GitDiff', 'RemoteWeb', 'logos', 'Include', 'Perl', 'SampleProject', 'SampleObjectiveC', 'SampleMultiProject', 'VendorFrameworks']
 if args.simulator:
     resources.append('SampleLogosGenerated')
     resources.append('SampleMultiObjectiveC')
@@ -78,10 +79,16 @@ for resource in resources:
                     ignore=shutil.ignore_patterns('.git', '*.bundle', '*.dylib', '*.a', '*.o'))
 if args.profile:
     shutil.copy2(args.profile, app / 'embedded.mobileprovision')
+# Precompressed offline editor assets reduce LAN transfer latency.
+for asset in (app / 'RemoteWeb' / 'monaco').rglob('*'):
+    if asset.suffix in ('.js', '.css') and asset.stat().st_size > 1024:
+        asset.with_name(asset.name + '.gz').write_bytes(gzip.compress(asset.read_bytes(), compresslevel=6, mtime=0))
+
 info = {
     'CFBundleExecutable': 'TheosMobileCompiler', 'CFBundleIdentifier': 'com.xuegao.theosmobilecompiler',
     'CFBundleName': 'Dylix', 'CFBundleDisplayName': 'Dylix',
-    'NSCameraUsageDescription': '拍摄照片作为您选择发送给模型的参考附件。', 'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': '1.0.6', 'CFBundleVersion': '147',
+    'CFBundleDevelopmentRegion': 'zh-Hans', 'CFBundleLocalizations': ['zh-Hans', 'en'],
+    'NSCameraUsageDescription': '拍摄照片作为您选择发送给模型的参考附件。', 'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': '1.0.7', 'CFBundleVersion': '160',
     'CFBundleDocumentTypes': [{'CFBundleTypeName':'Dylix Files','CFBundleTypeRole':'Editor','LSHandlerRank':'Alternate','LSItemContentTypes':['public.data','public.archive','public.source-code']}],
     'CFBundleURLTypes': [{'CFBundleURLName':'Dylix Incoming','CFBundleURLSchemes':['dylix', 'tweakforge']}],
     'BGTaskSchedulerPermittedIdentifiers': ['com.xuegao.theosmobilecompiler.ai.processing'],
@@ -89,7 +96,7 @@ info = {
     'NSSupportsLiveActivities': True,
     'MinimumOSVersion': '15.0', 'UIDeviceFamily': [1, 2],
     'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True},
-    'NSLocalNetworkUsageDescription': '仅在你明确配置局域网 AI 服务时连接该服务。',
+    'NSLocalNetworkUsageDescription': '在你开启局域网远程工作台或配置局域网 AI 服务时，允许同一 Wi-Fi 中经你配对的设备访问。',
     'UILaunchScreen': {}, 'UIFileSharingEnabled': True, 'LSSupportsOpeningDocumentsInPlace': True,
     'UISupportedInterfaceOrientations': ['UIInterfaceOrientationPortrait', 'UIInterfaceOrientationLandscapeLeft', 'UIInterfaceOrientationLandscapeRight'],
     'CFBundleSupportedPlatforms': ['iPhoneSimulator' if args.simulator else 'iPhoneOS'],
@@ -138,11 +145,12 @@ classdumplib = ROOT / 'build' / ('classdump-' + platform) / 'libtweakforge_class
 subprocess.run(['python3', str(ROOT / 'scripts/build_classdump.py'), '--platform', platform], check=True)
 cmd = ['xcrun', '--sdk', sdk, 'clang', '-arch', arch, '-isysroot', sysroot,
        '-mios-simulator-version-min=15.0' if args.simulator else '-miphoneos-version-min=15.0',
-       '-fobjc-arc', '-fmodules', '-I' + str(ROOT / 'Vendor/libgit2/include'), '-weak_framework', 'BackgroundTasks', '-framework', 'AVFoundation', '-framework', 'UserNotifications', '-framework', 'Security', '-framework', 'CoreFoundation', '-liconv', '-framework', 'UIKit', '-framework', 'CoreGraphics', '-framework', 'QuartzCore', '-framework', 'Foundation', '-framework', 'UniformTypeIdentifiers', '-framework', 'WebKit', '-framework', 'JavaScriptCore', '-larchive',
+       '-fobjc-arc', '-fmodules', '-I' + str(ROOT / 'Vendor/libgit2/include'), '-framework', 'Network', '-framework', 'CoreImage', '-weak_framework', 'BackgroundTasks', '-framework', 'AVFoundation', '-framework', 'UserNotifications', '-framework', 'Security', '-framework', 'CoreFoundation', '-liconv', '-framework', 'UIKit', '-framework', 'CoreGraphics', '-framework', 'QuartzCore', '-framework', 'Foundation', '-framework', 'UniformTypeIdentifiers', '-framework', 'WebKit', '-framework', 'JavaScriptCore', '-larchive',
        '-F' + str(frameworks), '-framework', 'ios_system',
        '-Wl,-needed_framework,libLLVM',
        '-Wl,-rpath,@executable_path/Frameworks', str(ROOT / 'App/main.m'), str(ROOT / 'App/RuntimeDiagnostics.m'), str(ROOT / 'App/ArchiveImport.m'), str(ROOT / 'App/TheosMakefile.m'), str(ROOT / 'App/DebPackage.m'), str(ROOT / 'App/OutputNaming.m'), str(ROOT / 'App/CompatibilityRepair.m'), str(ROOT / 'App/Studio.m'), str(ROOT / 'App/StorageSpace.m'), str(ROOT / 'App/ProjectSafety.m'), str(ROOT / 'App/ProjectTrash.m'), str(ROOT / 'App/GlassSupport.m'), str(ROOT / 'App/GitService.m'), str(ROOT / 'App/GitUI.m'), str(ROOT / 'App/GitHubRepositories.m'), str(ROOT / 'App/GitPATGuide.m'), str(ROOT / 'App/LinkSupport.m'), str(ROOT / 'App/HelpArticle.m'), str(ROOT / 'App/GitAutomation.m'), str(ROOT / 'App/GitDiffView.m'), str(gitlib), str(ROOT / 'Vendor/MBProgressHUD/MBProgressHUD.m'), '-o', str(app / 'TheosMobileCompiler')]
 cmd.extend(str(p) for p in sorted((ROOT / 'App/AI').rglob('*.m')))
+cmd.extend(str(p) for p in sorted((ROOT / 'App/Remote').glob('*.m')))
 cmd.append(str(ROOT / 'App/SDKResources.m'))
 cmd.extend(str(p) for p in sorted((ROOT / 'App/Incoming').glob('*.m')))
 cmd.extend([str(classdumplib), '-framework', 'PhotosUI', '-framework', 'ImageIO'])
@@ -172,7 +180,7 @@ share.mkdir(parents=True, exist_ok=True)
 share_info = {
  'CFBundleExecutable':'TweakForgeShare','CFBundleIdentifier':'com.xuegao.theosmobilecompiler.share',
  'CFBundleName':'TweakForgeShare','CFBundleDisplayName':'Dylix','CFBundlePackageType':'XPC!',
- 'CFBundleShortVersionString':'1.0.6','CFBundleVersion':info['CFBundleVersion'],
+ 'CFBundleShortVersionString':'1.0.7','CFBundleVersion':info['CFBundleVersion'],
  'MinimumOSVersion':'15.0','UIDeviceFamily':[1,2],
  'CFBundleSupportedPlatforms':info['CFBundleSupportedPlatforms'],
  'NSExtension':{'NSExtensionPointIdentifier':'com.apple.share-services',

@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <BackgroundTasks/BackgroundTasks.h>
+NSString *UIApplicationWillResignActiveNotification=@"TestWillResign";
 NSString *UIApplicationDidBecomeActiveNotification=@"TestForeground";
 NSString *UIApplicationDidEnterBackgroundNotification=@"TestBackground";
 static NSUInteger checks;
@@ -26,6 +27,7 @@ static void Check(BOOL yes,NSString *name){checks++;if(!yes){NSLog(@"FAIL %@",na
 - (void)cancelTaskRequestWithIdentifier:(NSString *)i{self.cancellations++;}
 - (BOOL)submitTaskRequest:(BGContinuedProcessingTaskRequest *)r error:(NSError **)e{self.submissions++;Check(r.strategy==BGContinuedProcessingTaskRequestSubmissionStrategyFail,@"no delayed duplicate job queue");if(self.denySubmission){if(e)*e=[NSError errorWithDomain:@"fixture" code:4 userInfo:nil];return NO;}return YES;}
 @end
+#import "../App/AI/Background/TFScreenAwake.m"
 #import "../App/AI/Background/TFAIBackground.m"
 static void Drain(void){[NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:.02]];}
 int main(){@autoreleasepool{
@@ -56,5 +58,9 @@ int main(){@autoreleasepool{
  TestAudioEnabled=YES;NSString *handoff=[c begin:nil];[c end:handoff success:YES];NSString *next=[c begin:nil];[NSRunLoop.mainRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:.7]];Check(TestAudioPlaying&&c.runs.count==1&&!c.audioStopPending,@"new run invalidates previous delayed audio stop");[c end:next success:NO];Check(!TestAudioPlaying&&!c.audioStopPending,@"failed final run stops audio immediately");
  NSString *fallbackAudio=[c begin:nil];NSUInteger fallbackSubmissions=scheduler.submissions;TestAudioPlaying=NO;[c audioChanged];Check(c.pending&&scheduler.submissions==fallbackSubmissions+1,@"foreground audio loss requests continued processing fallback");[c end:fallbackAudio success:NO];
  NSString *disableIdle=[c begin:nil];[c end:disableIdle success:YES];TestAudioEnabled=NO;[c audioPreferenceChanged];Check(!TestAudioPlaying&&!c.audioStopPending,@"disabling idle audio cancels handoff immediately");
- Check(!app.expirations.count,@"all assertions released");Check([[c.diagnosticEvents valueForKey:@"event"] containsObject:@"continued_submit_failed"]&&[[c.diagnosticEvents valueForKey:@"event"] containsObject:@"system_expiration"],@"diagnostics distinguish submission failure and system expiration");Check([[c.diagnosticEvents valueForKey:@"event"] containsObject:@"entered_background"],@"background transition recorded");for(int i=0;i<90;i++)[c record:@"fixture" details:nil];Check(c.diagnosticEvents.count==80,@"diagnostic history bounded");NSLog(@"PASS %lu background checks",(unsigned long)checks);
+ Check(!app.expirations.count,@"all assertions released");Check([[c.diagnosticEvents valueForKey:@"event"] containsObject:@"continued_submit_failed"]&&[[c.diagnosticEvents valueForKey:@"event"] containsObject:@"system_expiration"],@"diagnostics distinguish submission failure and system expiration");Check([[c.diagnosticEvents valueForKey:@"event"] containsObject:@"entered_background"],@"background transition recorded");for(int i=0;i<90;i++)[c record:@"fixture" details:nil];Check(c.diagnosticEvents.count==80,@"diagnostic history bounded"); app.applicationState=UIApplicationStateActive;TestAudioEnabled=YES;NSString *awakeA=[c begin:nil],*awakeB=[c begin:nil];Check(app.idleTimerDisabled,@"actual AI begin acquires awake reason");[c end:awakeA success:YES];Check(app.idleTimerDisabled,@"parallel AI finish preserves awake reason");[c end:awakeB success:NO];Check(!app.idleTimerDisabled,@"last failed AI releases awake reason");
+ TFScreenAwakeSet(@"remote",YES);NSString *awakeRemote=[c begin:nil];[c end:awakeRemote success:YES];Check(app.idleTimerDisabled,@"AI completion preserves LAN awake ownership");TFScreenAwakeSet(@"remote",NO);Check(!app.idleTimerDisabled,@"LAN and AI idle restores normal screen timer");
+ NSString *awakeExpire=[c begin:nil];[c expire:@"fixture" source:@"fixture"];Check(!app.idleTimerDisabled,@"AI expiration releases awake reason");(void)awakeExpire;
+ TFScreenAwakeSet(@"remote",YES);app.applicationState=UIApplicationStateInactive;[NSNotificationCenter.defaultCenter postNotificationName:UIApplicationWillResignActiveNotification object:nil];Check(!app.idleTimerDisabled,@"inactive app releases foreground screen assertion");app.applicationState=UIApplicationStateActive;[NSNotificationCenter.defaultCenter postNotificationName:UIApplicationDidBecomeActiveNotification object:nil];Check(app.idleTimerDisabled,@"foreground restores remaining LAN awake reason");TFScreenAwakeSet(@"remote",NO);
+NSLog(@"PASS %lu background checks",(unsigned long)checks);
  }return 0;}

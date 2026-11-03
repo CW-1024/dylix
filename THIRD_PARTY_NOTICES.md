@@ -35,3 +35,11 @@
 ## 预编译工具链
 
 Release 的工具链包包含 ios_system、LLVM/Clang/LLD、Perl 对应 xcframework 和许可证。来源、版本与包/文件摘要见 dependencies.lock.json；它不包含 Apple SDK。Apache/BSD/Artistic 等第三方组件继续适用原条款。
+
+## Dylix Remote
+
+原生服务、Web UI 与 SVG 图标为本项目原创实现，适用仓库 GPL-3.0-or-later；TLS使用Apple系统Network/Security，无第三方TLS库。
+
+离线编辑器 **Monaco Editor 0.52.2**，Microsoft Corporation，MIT许可证。来源为npm官方包 https://registry.npmjs.org/monaco-editor/-/monaco-editor-0.52.2.tgz ，分发min/vs AMD资源，版本与来源记录于Resources/RemoteWeb/monaco/SOURCE.json。完整许可保留于该目录LICENSE及Resources/ThirdPartyNotices/monaco-editor-MIT.txt；无公网CDN。
+
+Build152：远程工作台轻量编辑器与文件预览复用已列出的highlight.js 11.11.1离线构建，副本及BSD-3-Clause许可位于Resources/RemoteWeb/highlight.js和highlight-LICENSE。

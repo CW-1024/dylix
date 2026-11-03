@@ -1,0 +1,14 @@
+{
+  "name": "monaco-editor",
+  "version": "0.52.2",
+  "source": "https://registry.npmjs.org/monaco-editor/-/monaco-editor-0.52.2.tgz",
+  "license": "MIT",
+  "files": "min/vs (offline AMD distribution)",
+  "localPatches": [
+    {
+      "file": "vs/editor/editor.main.js",
+      "description": "Handle word-highlighter Delayer cancellation on model switch/dispose using Monaco onUnexpectedError, which ignores CancellationError and retains reporting for other failures. Two previously unobserved trigger promises now have explicit catch handlers.",
+      "record": "DYLIX_PATCHES.md"
+    }
+  ]
+}

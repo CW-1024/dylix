@@ -1,4 +1,6 @@
+#import "AI/Background/TFScreenAwake.h"
 #import "StorageSpace.h"
+#import "Remote/DXRemoteService.h"
 #import "AI/Background/TFAIBackground.h"
 #import "AI/Background/TFAINotifications.h"
 #import "RuntimeDiagnostics.h"
@@ -72,6 +74,7 @@ static void *invokeTool(void *opaque) {
     return NULL;
 }
 static BOOL TMCBuildRunning = NO;
+BOOL TMCBuildIsRunning(void){NSCAssert(NSThread.isMainThread,@"Main-thread build state");return TMCBuildRunning;}
 
 static int runToolOutput(NSArray<NSString *> *arguments, FILE *input, FILE *log, FILE *errors) {
 #if TARGET_OS_SIMULATOR
@@ -555,7 +558,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
     TMCBuildRunning = YES;
     self.hasBuilt = YES;
     self.lastPackage = nil;
-    UIApplication.sharedApplication.idleTimerDisabled = YES;
+    TFScreenAwakeSet(@"build",YES);
     self.console.text = @"执行 IPA 内嵌编译器…\n";
     self.navigationItem.rightBarButtonItem.enabled = NO;
     self.navigationItem.leftBarButtonItem.enabled = NO;
@@ -563,7 +566,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
     NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
     self.lastBuild = [documents stringByAppendingPathComponent:[@"Build-" stringByAppendingString:NSUUID.UUID.UUIDString]];
     NSString *build = self.lastBuild;
-    NSError *directoryError=nil;if(![NSFileManager.defaultManager createDirectoryAtPath:build withIntermediateDirectories:YES attributes:nil error:&directoryError]){self.hasBuilt=NO;TMCBuildRunning=NO;UIApplication.sharedApplication.idleTimerDisabled=NO;self.console.text=[@"创建构建目录失败：" stringByAppendingString:directoryError.localizedDescription];if(self.buildCompletion)self.buildCompletion(NO);return;}
+    NSError *directoryError=nil;if(![NSFileManager.defaultManager createDirectoryAtPath:build withIntermediateDirectories:YES attributes:nil error:&directoryError]){self.hasBuilt=NO;TMCBuildRunning=NO;TFScreenAwakeSet(@"build",NO);self.console.text=[@"创建构建目录失败：" stringByAppendingString:directoryError.localizedDescription];if(self.buildCompletion)self.buildCompletion(NO);return;}
     NSDictionary *running=@{@"startedAt":@(NSDate.date.timeIntervalSince1970)};[[NSJSONSerialization dataWithJSONObject:running options:0 error:nil] writeToFile:[build stringByAppendingPathComponent:@".build-in-progress.json"] atomically:YES];
     NSString *globalDebPattern=[NSUserDefaults.standardUserDefaults stringForKey:@"StudioOutputPattern-deb"]?:TMCDefaultOutputPattern(@"deb");
     NSString *globalDylibPattern=[NSUserDefaults.standardUserDefaults stringForKey:@"StudioOutputPattern-dylib"]?:TMCDefaultOutputPattern(@"dylib");
@@ -585,7 +588,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         FILE *log = fopen(logPath.fileSystemRepresentation, "w+");
         TMCLog(log,"BUILD STARTED — %s\n",NSDate.date.description.UTF8String);
         FILE *input = fopen("/dev/null", "r");
-        if(!log||!input){if(log)fclose(log);if(input)fclose(input);NSDictionary *failure=@{@"success":@NO,@"commands":@[],@"packageError":@"创建构建日志失败，请检查可用存储空间"};[[NSJSONSerialization dataWithJSONObject:failure options:0 error:nil] writeToFile:[build stringByAppendingPathComponent:@"report.json"] atomically:YES];dispatch_async(dispatch_get_main_queue(),^{self.hasBuilt=NO;TMCBuildRunning=NO;UIApplication.sharedApplication.idleTimerDisabled=NO;self.console.text=failure[@"packageError"];if(self.buildCompletion)self.buildCompletion(NO);});return;}
+        if(!log||!input){if(log)fclose(log);if(input)fclose(input);NSDictionary *failure=@{@"success":@NO,@"commands":@[],@"packageError":@"创建构建日志失败，请检查可用存储空间"};[[NSJSONSerialization dataWithJSONObject:failure options:0 error:nil] writeToFile:[build stringByAppendingPathComponent:@"report.json"] atomically:YES];dispatch_async(dispatch_get_main_queue(),^{self.hasBuilt=NO;TMCBuildRunning=NO;TFScreenAwakeSet(@"build",NO);self.console.text=failure[@"packageError"];if(self.buildCompletion)self.buildCompletion(NO);});return;}
         initializeEnvironment();
         setenv("SYSROOT", NSBundle.mainBundle.bundlePath.fileSystemRepresentation, 1);
         NSString *perlLib = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"Perl"];
@@ -631,7 +634,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
                 self.hasBuilt = NO; TMCBuildRunning = NO;
                 if (self.buildCompletion) self.buildCompletion(NO);
                 self.console.text = @"Logos 执行失败，请点击导出结果，保存 build.log 以便排查。";
-                UIApplication.sharedApplication.idleTimerDisabled = NO;
+                TFScreenAwakeSet(@"build",NO);
                 self.navigationItem.leftBarButtonItem.enabled = YES;
                 ((UIBarButtonItem *)self.toolbarItems.firstObject).enabled = YES;
             }); fclose(input); fclose(log); return; }
@@ -648,7 +651,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
             NSDictionary *failure=@{@"success":@NO,@"execution":@"embedded iOS frameworks",@"error":sdkError.localizedDescription?:@"SDK preparation failed",@"commands":@[],@"startedAt":@(startedAt),@"finishedAt":@(NSDate.date.timeIntervalSince1970)};
             [[NSJSONSerialization dataWithJSONObject:failure options:NSJSONWritingPrettyPrinted error:nil] writeToFile:[build stringByAppendingPathComponent:@"report.json"] atomically:YES];
             fclose(input);fclose(log);
-            dispatch_async(dispatch_get_main_queue(), ^{self.hasBuilt=NO;TMCBuildRunning=NO;UIApplication.sharedApplication.idleTimerDisabled=NO;self.navigationItem.leftBarButtonItem.enabled=YES;self.navigationItem.rightBarButtonItem.enabled=YES;((UIBarButtonItem *)self.toolbarItems.firstObject).enabled=YES;self.console.text=sdkError.localizedDescription;if(self.buildCompletion)self.buildCompletion(NO);});return;
+            dispatch_async(dispatch_get_main_queue(), ^{self.hasBuilt=NO;TMCBuildRunning=NO;TFScreenAwakeSet(@"build",NO);self.navigationItem.leftBarButtonItem.enabled=YES;self.navigationItem.rightBarButtonItem.enabled=YES;((UIBarButtonItem *)self.toolbarItems.firstObject).enabled=YES;self.console.text=sdkError.localizedDescription;if(self.buildCompletion)self.buildCompletion(NO);});return;
         }
         TMCLog(log,"SDK=%s; deployment target=%s; embedded Clang/LLD 14\n",sdkVersion.UTF8String,minimum.UTF8String);
         NSString *headers = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"ClangInclude"];
@@ -671,7 +674,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
             TMCLog(log,"output naming error: %s\n",namingError.localizedDescription.UTF8String);TMCLog(log,"BUILD FAILED — output naming; duration=%.2fs\n",NSProcessInfo.processInfo.systemUptime-startedUptime);fflush(log);fclose(input);fclose(log);
             NSDictionary *failure=@{@"execution":@"embedded iOS frameworks",@"success":@NO,@"commands":@[],@"outputNamingError":namingError.localizedDescription?:@"文件名模板有误",@"startedAt":@(startedAt),@"finishedAt":@(NSDate.date.timeIntervalSince1970),@"durationSeconds":@(NSProcessInfo.processInfo.systemUptime-startedUptime)};
             [[NSJSONSerialization dataWithJSONObject:failure options:NSJSONWritingPrettyPrinted error:nil] writeToFile:[build stringByAppendingPathComponent:@"report.json"] atomically:YES];
-            dispatch_async(dispatch_get_main_queue(),^{self.hasBuilt=NO;TMCBuildRunning=NO;UIApplication.sharedApplication.idleTimerDisabled=NO;self.console.text=namingError.localizedDescription;self.navigationItem.rightBarButtonItem.enabled=YES;self.navigationItem.leftBarButtonItem.enabled=YES;((UIBarButtonItem *)self.toolbarItems.firstObject).enabled=YES;if(self.buildCompletion)self.buildCompletion(NO);});return;
+            dispatch_async(dispatch_get_main_queue(),^{self.hasBuilt=NO;TMCBuildRunning=NO;TFScreenAwakeSet(@"build",NO);self.console.text=namingError.localizedDescription;self.navigationItem.rightBarButtonItem.enabled=YES;self.navigationItem.leftBarButtonItem.enabled=YES;((UIBarButtonItem *)self.toolbarItems.firstObject).enabled=YES;if(self.buildCompletion)self.buildCompletion(NO);});return;
         }
         TMCLog(log,"metadata: %s; internal product: %s; output dylib: %s; output deb: %s\n",customMetadata?"project control/plist":"default test metadata (com.example.target)",tweakName.UTF8String,dylibName.UTF8String,debName.UTF8String);
         TMCLog(log,"package scheme=%s; CPU=%s; package enabled=%s\n",packageScheme.UTF8String,cpu.UTF8String,[config[@"package"] isEqual:@NO]?"no":"yes");
@@ -817,7 +820,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         NSString *text = [NSString stringWithContentsOfFile:logPath encoding:NSUTF8StringEncoding error:nil] ?: @"No log";
         fclose(input); fclose(log);
         dispatch_async(dispatch_get_main_queue(), ^{
-            UIApplication.sharedApplication.idleTimerDisabled = NO;
+            TFScreenAwakeSet(@"build",NO);
             self.console.text = [NSString stringWithFormat:@"%@ · %lu 个源码\n日志与产物已保存，可导出完整文件。", [report[@"success"] boolValue] ? @"构建成功" : @"构建失败", (unsigned long)projectSources.count];
             self.navigationItem.rightBarButtonItem.enabled = YES;
             self.navigationItem.leftBarButtonItem.enabled = YES;
@@ -829,6 +832,9 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
 }
 @end
 
+#if TARGET_OS_SIMULATOR
+#include "../tests/RemoteSimulatorRegression.inc"
+#endif
 @interface AppDelegate : UIResponder <UIApplicationDelegate>
 @property(nonatomic) UIWindow *window;
 @end
@@ -837,6 +843,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
 - (BOOL)application:(UIApplication *)app openURL:(NSURL *)url options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options {if(url.isFileURL){TFIncomingReceive(self.window.rootViewController,url);return YES;}if(([url.scheme isEqual:@"tweakforge"]||[url.scheme isEqual:@"dylix"])&&[url.host isEqual:@"ai"]){TMCOpenAIConversation(self.window.rootViewController,nil,nil);return YES;}if(([url.scheme isEqual:@"tweakforge"]||[url.scheme isEqual:@"dylix"])&&[url.host isEqual:@"incoming"]){TFIncomingDrain(self.window.rootViewController);return YES;}return NO;}
 - (void)applicationDidBecomeActive:(UIApplication *)application {TFIncomingDrain(self.window.rootViewController);}
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
+    [DXRemoteService shared];
     TFAIBackgroundRegister();TFAINotificationsRegister();[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(openAIFromNotification:) name:@"TFAIOpenConversation" object:nil];
     [NSUserDefaults.standardUserDefaults registerDefaults:@{@"StudioTheme":@1, @"StudioFont":@14, @"StudioSDKVersion":@"16.4", @"StudioDeploymentTarget":@"15.0"}];
     self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
@@ -848,6 +855,8 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
     BOOL testing = [NSProcessInfo.processInfo.arguments containsObject:@"--self-test"] || [NSProcessInfo.processInfo.arguments containsObject:@"--self-test-project"];
     self.window.rootViewController = testing ? [[TMCNavigationController alloc] initWithRootViewController:[CompilerController new]] : TMCStudioRoot();
 #if TARGET_OS_SIMULATOR
+    if([NSProcessInfo.processInfo.arguments containsObject:@"--remote-test"])self.window.rootViewController=[[TMCNavigationController alloc]initWithRootViewController:DXRemoteSettingsController()];
+    if([NSProcessInfo.processInfo.arguments containsObject:@"--remote-regression"])self.window.rootViewController=[[TMCNavigationController alloc]initWithRootViewController:DXRemoteRegressionController()];
     extern UIViewController *TFAIShare114Regression(void);
     extern UIViewController *TFAIFile135Regression(void);
     if([NSProcessInfo.processInfo.arguments containsObject:@"--ai-files135-test"])self.window.rootViewController=[[TMCNavigationController alloc]initWithRootViewController:TFAIFile135Regression()];

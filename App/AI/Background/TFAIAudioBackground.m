@@ -4,6 +4,7 @@
 static NSString *const AudioPreference=@"TFAI.Background.AudioEnabled";
 @interface TFAIAudioBackground : NSObject <AVAudioPlayerDelegate>
 @property AVAudioPlayer *player;
+@property NSMutableSet<NSString *> *owners;
 @property BOOL wanted,interrupted,interruptionEnded,sessionActive;
 @property NSString *failure;
 @property NSUInteger retryGeneration,retryCount;
@@ -11,9 +12,9 @@ static NSString *const AudioPreference=@"TFAI.Background.AudioEnabled";
 @property(copy) void (^changed)(void);
 @end
 @implementation TFAIAudioBackground
-- (instancetype)init{if((self=[super init])){[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(interruption:) name:AVAudioSessionInterruptionNotification object:nil];[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(reset:) name:AVAudioSessionMediaServicesWereResetNotification object:nil];[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(mediaLost:) name:AVAudioSessionMediaServicesWereLostNotification object:nil];[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(foreground:) name:UIApplicationDidBecomeActiveNotification object:nil];}return self;}
+- (instancetype)init{if((self=[super init])){_owners=[NSMutableSet new];[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(interruption:) name:AVAudioSessionInterruptionNotification object:nil];[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(reset:) name:AVAudioSessionMediaServicesWereResetNotification object:nil];[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(mediaLost:) name:AVAudioSessionMediaServicesWereLostNotification object:nil];[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(foreground:) name:UIApplicationDidBecomeActiveNotification object:nil];}return self;}
 - (void)dealloc{[NSNotificationCenter.defaultCenter removeObserver:self];}
-- (void)notify{if(self.changed)self.changed();}
+- (void)notify{if(self.changed)self.changed();[NSNotificationCenter.defaultCenter postNotificationName:@"TFAIAudioBackgroundStateChanged" object:self];}
 // One second of zero-valued PCM, generated locally; no file/network/recording permission.
 - (NSData *)silence{NSMutableData *d=[NSMutableData new];[d appendBytes:"RIFF" length:4];uint32_t a=CFSwapInt32HostToLittle(16036);[d appendBytes:&a length:4];[d appendBytes:"WAVEfmt " length:8];a=CFSwapInt32HostToLittle(16);[d appendBytes:&a length:4];uint16_t b=CFSwapInt16HostToLittle(1);[d appendBytes:&b length:2];[d appendBytes:&b length:2];a=CFSwapInt32HostToLittle(8000);[d appendBytes:&a length:4];a=CFSwapInt32HostToLittle(16000);[d appendBytes:&a length:4];b=CFSwapInt16HostToLittle(2);[d appendBytes:&b length:2];b=CFSwapInt16HostToLittle(16);[d appendBytes:&b length:2];[d appendBytes:"data" length:4];a=CFSwapInt32HostToLittle(16000);[d appendBytes:&a length:4];[d increaseLengthBy:16000];return d;}
 - (void)releaseSession{if(!self.sessionActive)return;self.sessionActive=NO;[AVAudioSession.sharedInstance setActive:NO withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation error:nil];}
@@ -31,9 +32,11 @@ static NSString *const AudioPreference=@"TFAI.Background.AudioEnabled";
 @end
 static TFAIAudioBackground *Audio(void){static TFAIAudioBackground *a;static dispatch_once_t once;dispatch_once(&once,^{a=[TFAIAudioBackground new];});return a;}
 BOOL TFAIAudioBackgroundEnabled(void){id v=[NSUserDefaults.standardUserDefaults objectForKey:AudioPreference];return v?[v boolValue]:YES;}
-void TFAIAudioBackgroundSetEnabled(BOOL enabled){[NSUserDefaults.standardUserDefaults setBool:enabled forKey:AudioPreference];}
-BOOL TFAIAudioBackgroundStart(void){return TFAIAudioBackgroundEnabled()&&[Audio() start];}
-void TFAIAudioBackgroundStop(void){[Audio() stop];}
+void TFAIAudioBackgroundSetEnabled(BOOL enabled){[NSUserDefaults.standardUserDefaults setBool:enabled forKey:AudioPreference];TFAIAudioBackground *a=Audio();if(!enabled)[a stop];else if(a.owners.count)[a start];[a notify];}
+BOOL TFAIAudioBackgroundAcquire(NSString *owner){NSCAssert(NSThread.isMainThread,@"Audio leases require main thread");if(!owner.length)return NO;TFAIAudioBackground *a=Audio();BOOL added=![a.owners containsObject:owner];[a.owners addObject:owner];BOOL playing=TFAIAudioBackgroundEnabled()&&[a start];if(added)[a notify];return playing;}
+void TFAIAudioBackgroundRelease(NSString *owner){NSCAssert(NSThread.isMainThread,@"Audio leases require main thread");TFAIAudioBackground *a=Audio();BOOL held=[a.owners containsObject:owner];[a.owners removeObject:owner];if(!a.owners.count)[a stop];if(held)[a notify];}
+BOOL TFAIAudioBackgroundStart(void){return TFAIAudioBackgroundAcquire(@"ai");}
+void TFAIAudioBackgroundStop(void){TFAIAudioBackgroundRelease(@"ai");}
 BOOL TFAIAudioBackgroundPlaying(void){return Audio().player.isPlaying;}
-NSDictionary *TFAIAudioBackgroundDiagnostics(void){TFAIAudioBackground *a=Audio();return @{@"enabled":@(TFAIAudioBackgroundEnabled()),@"playing":@(a.player.isPlaying),@"requested":@(a.wanted),@"interrupted":@(a.interrupted),@"sessionActive":@(a.sessionActive),@"retryPending":@(a.retryPending),@"retryCount":@(a.retryCount),@"error":a.failure?:@""};}
+NSDictionary *TFAIAudioBackgroundDiagnostics(void){TFAIAudioBackground *a=Audio();return @{@"owners":a.owners.allObjects,@"enabled":@(TFAIAudioBackgroundEnabled()),@"playing":@(a.player.isPlaying),@"requested":@(a.wanted),@"interrupted":@(a.interrupted),@"sessionActive":@(a.sessionActive),@"retryPending":@(a.retryPending),@"retryCount":@(a.retryCount),@"error":a.failure?:@""};}
 void TFAIAudioBackgroundObserve(void (^changed)(void)){Audio().changed=changed;}

@@ -12,13 +12,27 @@ iPhone / iPad 本机构建 · AI 开发助手 · 项目与 Git · 二进制工�
 
 </div>
 
-当前版本：**1.0.6（147）**。修复本机插件异常展开，支持 GNU++17、ZIP 附件与自动符号裁剪，优化会话存储和排序。
+已发布版本：**1.0.7（160）**。新增 Dylix Remote 局域网开发工作台，接通手机本机项目、构建、Git、AI、分析与 WebDAV；支持离线代码编辑、自动保存、撤销重做和可调整的编辑布局。
 
 ## 这是什么
 
 Dylix 是原生 iOS 插件开发工作台：在手机上管理源码、编辑代码、调用内嵌 Clang / LLD 和 Logos，并生成 dylib 与 deb。AI 可以按权限读取头文件、解释代码、修改项目、检查构建结果；编译工作在设备本机完成。
 
 它使用进程内 LLVM 工具链，并非完整 Theos shell 环境。现有 Theos 工程会经过受支持的 Makefile / 配置解析；任意脚本、Xcode 工程和完整 make 语义并不等同于已支持。
+
+## Dylix Remote · 局域网远程工作台
+
+Build 160：在手机「设置 → 远程开发 → 局域网远程」开启 HTTP 服务，同一 Wi-Fi 的电脑访问手机显示的地址。网页和 Monaco 随 App 离线打包，正确授权码即可连接；支持一次性随机码与钥匙串保存的固定码，倒计时每秒更新。默认关闭服务。
+
+项目编辑、构建、Git、AI、分析与 WebDAV 已接入手机端业务入口；工作区权限由配对时勾选，写入与危险操作仍独立确认。工作台与 WebDAV 均采用 HTTP，局域网传输为明文；没有证书配置步骤。Remote 与 AI 共享音频辅助并分别管理使用状态，遵循音频开关及 iOS 后台限制。
+
+后台先申请系统有限执行时间；开启音频辅助时由 Remote / AI 分别持有使用状态，避免互相提前停止。系统挂起或宽限耗尽时可能暂停监听，返回前台恢复服务与原授权。锁屏后受保护文件须解锁访问；不承诺永久后台。Finder / Windows 挂载及 iOS 15 / 26 真机长期锁屏仍待验证。
+
+在线编辑支持多语言语法高亮、多标签、默认自动保存、撤销重做、修改前备份与冲突校验；导航可折叠，文件栏可拖动调整或收起，并支持全屏编辑。上传下载不设置固定文件大小上限，实际受设备存储、内存及系统网络状态影响。
+
+<p align="center"><img src="docs/images/remote/editor-fullscreen159.png" width="100%" alt="Dylix Remote 全屏在线编辑实测界面" /></p>
+
+[架构与实施方案](docs/LAN_WORKSPACE_ARCHITECTURE.md) · [接口文档](docs/LAN_WORKSPACE_API.md) · [测试记录](docs/LAN_WORKSPACE_TESTS.md)
 
 ## 可以做什么
 
@@ -89,7 +103,7 @@ rustup target add aarch64-apple-ios x86_64-apple-ios
 python3 scripts/build.py --sdk-root LocalSDKs/iPhoneOS26.0.sdk
 ```
 
-输出 `build/Dylix-1.0.6-build147-unsigned.ipa`。安装前使用自己的证书/适用安装方式处理主 App、Share Extension 和嵌套 framework 签名。仓库不包含个人证书、描述文件或共享 API 密钥。
+输出 `build/Dylix-1.0.7-build160-unsigned.ipa`。安装前使用自己的证书/适用安装方式处理主 App、Share Extension 和嵌套 framework 签名。仓库不包含个人证书、描述文件或共享 API 密钥。
 
 **两个 SDK 角色不同**：`--sdk-root` 决定 Dylix App 自身的构建 SDK；内嵌插件构建 SDK 可选 16.4 / 26.0，默认仍为 **SDK 16.4 + 最低 iOS 15**。
 
@@ -111,6 +125,6 @@ IPA 导出依据 Objective-C 元数据，不等于还原源码。加密镜像会
 
 Dylix 原创代码与修改采用 **GNU General Public License v3.0 or later（GPL-3.0-or-later）**，完整条款见 [LICENSE](LICENSE)。分发修改版或二进制时，请遵循 GPL 对相应源码、许可文本和必要构建材料的要求；软件按现状提供，不附带担保。
 
-第三方代码保留原许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。感谢 LLVM / Clang / LLD、ios_system、Perl、Theos Logos、libgit2、REipa、MBProgressHUD、highlight.js、diff2html 等项目。第三方许可不因本项目采用 GPL 而被替换。
+第三方代码保留原许可证，详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。感谢 LLVM / Clang / LLD、ios_system、Perl、Theos Logos、libgit2、REipa、Monaco Editor、MBProgressHUD、highlight.js、diff2html 等项目。第三方许可不因本项目采用 GPL 而被替换。
 
 欢迎通过 [贡献说明](CONTRIBUTING.md) 一起改进 Dylix。

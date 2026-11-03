@@ -118,5 +118,12 @@
     "license": "BSD-style (see header)",
     "source": "https://github.com/theos/headers",
     "file": "CydiaSubstrate-header.txt"
+  },
+  {
+    "name": "Monaco Editor",
+    "version": "0.52.2",
+    "license": "MIT",
+    "source": "https://github.com/microsoft/monaco-editor",
+    "file": "monaco-editor-MIT.txt"
   }
 ]
