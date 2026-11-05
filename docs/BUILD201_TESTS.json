@@ -1,0 +1,80 @@
+{
+  "version": "1.0.9",
+  "build": 201,
+  "date": "2026-11-05",
+  "ipaSHA256": "94ce59bb0c1b9e2826c5facbd9d9d948bd240f81be663116672e8768ab1ca25f",
+  "ipaBytes": 139963380,
+  "componentVersions": {
+    "Payload/TheosMobileCompiler.app/Info.plist": {
+      "version": "1.0.9",
+      "build": "201",
+      "minimumOS": "15.0"
+    },
+    "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeShare.appex/Info.plist": {
+      "version": "1.0.9",
+      "build": "201",
+      "minimumOS": "15.0"
+    },
+    "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeActivity.appex/Info.plist": {
+      "version": "1.0.9",
+      "build": "201",
+      "minimumOS": "16.2"
+    },
+    "Payload/TheosMobileCompiler.app/Frameworks/TFTaskActivity.framework/Info.plist": {
+      "version": "1.0.9",
+      "build": "201",
+      "minimumOS": "16.2"
+    }
+  },
+  "archiveVerified": true,
+  "codesignDeviceAndSimulatorDeepStrictVerified": true,
+  "deviceExcludesSimulatorFixture": true,
+  "embeddedFLEX": {
+    "version": "1.0.0",
+    "build": 196,
+    "hashesVerified": true
+  },
+  "tests": {
+    "projectionChecks": 103,
+    "runtimeRegression": true,
+    "runtime40Rounds1200Tools": true,
+    "navigationGuards": 7,
+    "recoveryChecks": 12,
+    "nativeUI": [
+      {
+        "name": "native fixture exercises real proactive history cleanup",
+        "pass": true
+      },
+      {
+        "name": "request stores separate hard guard and history target",
+        "pass": true
+      },
+      {
+        "name": "native report explains target separately from guard",
+        "pass": true
+      },
+      {
+        "name": "new proactive diagnostics persist with session",
+        "pass": true
+      }
+    ],
+    "nativeMenuVisuallyVerified": true
+  },
+  "syntheticComparison": {
+    "baselineBuild": 200,
+    "baselineCommit": "0e992eef",
+    "beforeBytes": 1001758,
+    "baselineProjectedBytes": 517186,
+    "newProjectedBytes": 127740,
+    "newEligibleHistoryBytes": 59463,
+    "historyTargetBytes": 65536,
+    "guard512KiBAnd16MiBHaveIdenticalProjection": true,
+    "wireByteReductionPercent": 75.3
+  },
+  "limitations": [
+    "Synthetic transcript only; user full conversation not available",
+    "No paid model requests; byte reductions are not measured token or billing savings",
+    "Soft target can be exceeded by irreducible history; system/user/native continuation protected and hard guard still enforced",
+    "No new semantic summarization or persistent cache-hit guarantees"
+  ]
+}

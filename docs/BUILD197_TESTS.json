@@ -1,0 +1,88 @@
+{
+  "version": "1.0.8",
+  "build": 197,
+  "flexVersion": "1.0.0",
+  "flexBuild": 196,
+  "date": "2026-11-05",
+  "ipaSHA256": "05fce3da107b0e4a66fed09c27ba97525fb464e25fb44205f78077aa2c0df843",
+  "ipaBytes": 139957413,
+  "minimumOS": {
+    "Payload/TheosMobileCompiler.app/Info.plist": "15.0",
+    "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeActivity.appex/Info.plist": "16.2",
+    "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeShare.appex/Info.plist": "15.0"
+  },
+  "archiveVerified": true,
+  "codesignDeepStrictVerified": true,
+  "embeddedPluginManifestVerified": true,
+  "simulatorFixturesExcludedFromDevice": true,
+  "tests": {
+    "balance": {
+      "passed": true,
+      "checks": 91,
+      "networkAssertions": [
+        "automatic same-origin discovery",
+        "success/failure cache",
+        "single-flight",
+        "no redirect",
+        "response size",
+        "HTTP410 and 404 unsupported",
+        "recovery clears old error"
+      ]
+    },
+    "providers": {
+      "passed": true,
+      "checks": 100
+    },
+    "usage": {
+      "passed": true,
+      "checks": 28
+    },
+    "nativeUI": [
+      {
+        "name": "wallet failure shows actual HTTP and API codes",
+        "pass": true
+      },
+      {
+        "name": "official error remains failure rather than unsupported or zero",
+        "pass": true
+      },
+      {
+        "name": "actual endpoint details accessible through info button",
+        "pass": true
+      },
+      {
+        "name": "diagnostic presents actual official request URL",
+        "pass": true
+      },
+      {
+        "name": "diagnostic excludes server-echoed secret",
+        "pass": true
+      },
+      {
+        "name": "diagnostic copy action exists",
+        "pass": true
+      },
+      {
+        "name": "production protocol validator permits normalized auto-detection",
+        "pass": true
+      },
+      {
+        "name": "production protocol validator preserves HTTP opt-in",
+        "pass": true
+      }
+    ]
+  },
+  "onlineCheck": {
+    "url": "https://api.siliconflow.cn/v1/user/info",
+    "authentication": "none",
+    "status": 401,
+    "apiCode": 30014,
+    "officialOpenAPIVerified": true,
+    "codexXCurrentSourceReviewed": true
+  },
+  "limitations": [
+    "User authenticated HTTP410 not reproduced; no user keys used",
+    "No guarantee that diagnostic or optional status fix resolves user HTTP410",
+    "Only supported wallet shapes recognized; subscription and generic quota not treated as balance"
+  ]
+}

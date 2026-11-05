@@ -1,0 +1,30 @@
+{
+  "version": "1.0.9",
+  "build": 200,
+  "summaryRange": "193–199",
+  "sha256": "a576abd87f7fb99bf6ad1c0773861b6740b5355624ea2b60c97cd9d140dca56e",
+  "ipaBytes": 139962148,
+  "archiveAndDeepStrictSignatureVerified": true,
+  "componentVersions": {
+    "Payload/TheosMobileCompiler.app/Info.plist": {
+      "version": "1.0.9",
+      "build": "200"
+    },
+    "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeShare.appex/Info.plist": {
+      "version": "1.0.9",
+      "build": "200"
+    },
+    "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeActivity.appex/Info.plist": {
+      "version": "1.0.9",
+      "build": "200"
+    },
+    "Payload/TheosMobileCompiler.app/Frameworks/TFTaskActivity.framework/Info.plist": {
+      "version": "1.0.9",
+      "build": "200"
+    }
+  },
+  "flexVersion": "1.0.0",
+  "flexBuild": 196,
+  "embeddedFlexHashesVerified": true,
+  "changeScope": "Release version identifiers and grouped release notes only; previous Build199 functional tests not rerun"
+}

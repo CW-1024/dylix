@@ -1,0 +1,51 @@
+{
+  "version": "1.0.8",
+  "build": 198,
+  "flexVersion": "1.0.0",
+  "flexBuild": 196,
+  "date": "2026-11-05",
+  "ipaSHA256": "b481d9bbf4a86426e93b086fac8a1d4b04ff8d3a8a787a662a838cef621b279e",
+  "ipaBytes": 139959631,
+  "minimumOS": {
+    "Payload/TheosMobileCompiler.app/Info.plist": "15.0",
+    "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeActivity.appex/Info.plist": "16.2",
+    "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeShare.appex/Info.plist": "15.0"
+  },
+  "archiveVerified": true,
+  "codesignDeviceAndSimulatorDeepStrictVerified": true,
+  "embeddedPluginManifestVerified": true,
+  "simulatorFixturesExcludedFromDevice": true,
+  "tests": {
+    "projection": {
+      "passed": true,
+      "checks": 72
+    },
+    "runtime": {
+      "passed": true,
+      "log": "ContextRuntimeRun.py regression including actual fixture transport and blocked request zero calls"
+    },
+    "nativeUI": [
+      {
+        "name": "native report fixture uses real projection of old large assistant text",
+        "pass": true
+      },
+      {
+        "name": "new context diagnostic clears previous request provider tokens",
+        "pass": true
+      },
+      {
+        "name": "native context report includes retained categories and assistant offload count",
+        "pass": true
+      },
+      {
+        "name": "new context category diagnostics survive session restart",
+        "pass": true
+      }
+    ]
+  },
+  "limitations": [
+    "Full user transcript unavailable; synthetic reproduction does not identify exact user remaining payload",
+    "256KiB is a local serialized text guard, not the model token window",
+    "Protected user/system/native continuation may still exceed budget"
+  ]
+}

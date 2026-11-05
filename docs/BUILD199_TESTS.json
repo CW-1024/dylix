@@ -1,0 +1,33 @@
+{
+  "build": 199,
+  "version": "1.0.8",
+  "sha256": "3ffb7d083633c098185eaa68d5db7c86d4187d1f1609f39d65b5d75282cc138f",
+  "ipaBytes": 139962147,
+  "codesignAndArchiveVerified": true,
+  "projectionChecks": 82,
+  "runtimeRegressionPassed": true,
+  "nativeChecks": [
+    {
+      "name": "context setting accessible in AI usage section",
+      "pass": true
+    },
+    {
+      "name": "native context setting row exists",
+      "pass": true
+    },
+    {
+      "name": "native row displays saved custom size",
+      "pass": true
+    },
+    {
+      "name": "preset menu and custom entry presented",
+      "pass": true
+    },
+    {
+      "name": "setting explains next request scope",
+      "pass": true
+    }
+  ],
+  "custom768KiBSavedThroughNativeUI": true,
+  "deviceExcludesSimulatorFixture": true
+}
