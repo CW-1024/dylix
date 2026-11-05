@@ -1,5 +1,12 @@
 # 更新日志
 
+## 1.0.8 · Build 193 · 2026-11-05
+
+1. 完善隐根原生链接：使用 RootHide 的 Substrate 路径，最终 dylib 增加 ad-hoc 签名，发布裁剪与多方案打包共用正确配置。
+2. 新增打包前加载命令与残留路径检查，补充实际编译、签名和 Sileo 控制解析测试；真机安装仍待验证。
+
+详见 [Build193 测试记录](docs/BUILD193_TESTS.md)。
+
 ## 1.0.8 · Build 192 · 2026-11-05
 
 1. 修复 Issue #2 的 DEB 兼容性：使用标准 gzip 控制包与数据包，补齐父目录和 bundle 目录条目，改善 TrollFools 导入及 RootHide 目录识别。

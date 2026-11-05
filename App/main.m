@@ -14,6 +14,7 @@
 #import <pthread.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import "DebPackage.h"
+#import "PackageLinking.h"
 #import "OutputNaming.h"
 #import "ArchiveImport.h"
 #import "SDKResources.h"
@@ -729,6 +730,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
             [compileSources addObject:[originalSources[index] substringFromIndex:projectDirectory.length+1]];
         }
         NSMutableArray *link = [@[@"ld64.lld", @"-dylib", @"-arch", cpu, @"-platform_version", @"ios", minimum, sdkVersion, @"-syslibroot", sdk, @"-lSystem", @"-lobjc", @"-lc++", @"-framework", @"Foundation", @"-framework", @"UIKit", @"-F", vendorFrameworks, @"-rpath", [packageScheme isEqual:@"rootless"]?@"/var/jb/Library/Frameworks":[packageScheme isEqual:@"roothide"]?@"@loader_path/.jbroot/Library/Frameworks":@"/Library/Frameworks", @"-undefined", @"dynamic_lookup", @"-install_name", [NSString stringWithFormat:[packageScheme isEqual:@"roothide"]?@"@loader_path/.jbroot/Library/MobileSubstrate/DynamicLibraries/%@.dylib":@"@rpath/%@.dylib", tweakName]] mutableCopy];
+        link = [TMCPackageLinkArguments(link, packageScheme, vendorFrameworks, tweakName) mutableCopy];
         for (NSString *framework in config[@"frameworks"]) [link addObjectsFromArray:@[@"-framework", framework]];
         for (NSString *library in config[@"libraries"]) [link addObject:[@"-l" stringByAppendingString:library]];
         [link addObjectsFromArray:objects];
@@ -787,13 +789,15 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
             if(![scheme isEqual:packageScheme]){NSString *cache=[build stringByAppendingPathComponent:@".package-link-cache"];[NSFileManager.defaultManager createDirectoryAtPath:cache withIntermediateDirectories:YES attributes:nil error:nil];variantDylib=[@".package-link-cache" stringByAppendingPathComponent:[scheme stringByAppendingPathExtension:@"dylib"]];}else variantDylib=dylibName;
             if(!variantDylib||!variantDeb){allPassed=NO;report[@"outputNamingError"]=error.localizedDescription?:@"文件名无效";break;}
             TMCLog(log,"\n打包目标：%s\n",scheme.UTF8String);
-            NSMutableArray *variantLink=[link mutableCopy];
+            NSMutableArray *variantLink=[TMCPackageLinkArguments(link, scheme, vendorFrameworks, tweakName) mutableCopy];
             if(![scheme isEqual:packageScheme]){NSUInteger pathIndex=[variantLink indexOfObject:@"-rpath"],installIndex=[variantLink indexOfObject:@"-install_name"],outputIndex=[variantLink indexOfObject:@"-o"];
              variantLink[pathIndex+1]=[scheme isEqual:@"rootless"]?@"/var/jb/Library/Frameworks":[scheme isEqual:@"roothide"]?@"@loader_path/.jbroot/Library/Frameworks":@"/Library/Frameworks";
              variantLink[installIndex+1]=[NSString stringWithFormat:[scheme isEqual:@"roothide"]?@"@loader_path/.jbroot/Library/MobileSubstrate/DynamicLibraries/%@.dylib":@"@rpath/%@.dylib",tweakName];variantLink[outputIndex+1]=[build stringByAppendingPathComponent:variantDylib];
              TMCLog(log,"$ %s\n",[variantLink componentsJoinedByString:@" "].UTF8String);int status=runTool(variantLink,input,log);TMCLog(log,"exit=%d\n",status);[results addObject:@{@"command":[variantLink componentsJoinedByString:@" "],@"exit":@(status),@"stage":[@"link-" stringByAppendingString:scheme],@"source":@"all objects"}];if(status){allPassed=NO;report[@"packageError"]=[@"链接失败：" stringByAppendingString:scheme];break;}}
             if(![scheme isEqual:packageScheme]&&stripSymbols&&!TMCProcessReleaseSymbols(variantLink,variantDylib,scheme,build,input,log,releaseIndexes,symbolProcessing,&error)){allPassed=NO;report[@"packageError"]=error.localizedDescription?:@"发布裁剪失败";[NSFileManager.defaultManager removeItemAtPath:[build stringByAppendingPathComponent:variantDylib] error:nil];break;}
-            NSData *dylib=[NSData dataWithContentsOfFile:[build stringByAppendingPathComponent:variantDylib]];if(dylib&&[scheme isEqual:packageScheme])[namedArtifacts addObject:variantDylib];NSData *deb=nil;
+            NSData *dylib=[NSData dataWithContentsOfFile:[build stringByAppendingPathComponent:variantDylib]];
+            if ([scheme isEqual:@"roothide"] && !TMCNativeRootHideImage(dylib, &error)) { allPassed=NO; report[@"packageError"]=error.localizedDescription; TMCLog(log,"package error: %s\n",error.localizedDescription.UTF8String); break; }
+            if(dylib&&[scheme isEqual:packageScheme])[namedArtifacts addObject:variantDylib];NSData *deb=nil;
             if(!customMetadata)deb=TMCDebPackageForProject(dylib,tweakName,@"com.example.target",scheme,projectDirectory,config,&error);
             else if(hasControl&&projectPlists.count==1){NSString *control=[NSString stringWithContentsOfFile:controlPath encoding:NSUTF8StringEncoding error:&error];NSData *filter=[NSData dataWithContentsOfFile:[projectDirectory stringByAppendingPathComponent:projectPlists.firstObject] options:0 error:&error];if(control&&filter){NSString *adjusted=TMCControlForScheme(control,scheme);deb=TMCDebPackageWithResources(dylib,tweakName,filter,adjusted,projectDirectory,scheme,config,&error);[adjusted writeToFile:[build stringByAppendingPathComponent:multipleSchemes?[@"control-" stringByAppendingString:scheme]:@"control"] atomically:YES encoding:NSUTF8StringEncoding error:nil];[filter writeToFile:[build stringByAppendingPathComponent:@"filter.plist"] atomically:YES];}}
             else error=[NSError errorWithDomain:@"Compiler" code:5 userInfo:@{NSLocalizedDescriptionKey:@"请在项目设置填写目标 Bundle ID，并保存 control 和过滤 plist 后构建。"}];
@@ -826,7 +830,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         report[@"durationSeconds"]=@(NSProcessInfo.processInfo.systemUptime-startedUptime);
         TMCLog(log,"%s · %lu 个源码 · 耗时 %.2f 秒\n",[report[@"success"] boolValue]?"构建成功":"构建失败",(unsigned long)projectSources.count,[report[@"durationSeconds"] doubleValue]);
         for(NSString *artifact in namedArtifacts){NSDictionary *a=[NSFileManager.defaultManager attributesOfItemAtPath:[build stringByAppendingPathComponent:artifact] error:nil];TMCLog(log,"生成文件：%s · %s\n",artifact.UTF8String,[NSByteCountFormatter stringFromByteCount:a.fileSize countStyle:NSByteCountFormatterCountStyleFile].UTF8String);}
-        TMCLog(log,"签名状态：未签名，请导出后使用签名工具处理。\n");
+        TMCLog(log,"签名状态：隐根变体带链接器 ad-hoc 签名；其他产物请按目标环境处理签名。\n");
         NSData *json = [NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:nil];
         [json writeToFile:[build stringByAppendingPathComponent:@"report.json"] atomically:YES];
         fflush(log);
