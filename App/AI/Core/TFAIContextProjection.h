@@ -6,4 +6,5 @@
 + (NSArray *)project:(NSArray *)messages schemas:(NSArray *)schemas statistics:(NSDictionary **)statistics error:(NSError **)error;
 + (NSDictionary *)read:(NSDictionary *)arguments messages:(NSArray *)messages error:(NSError **)error;
 + (BOOL)containsPlaceholder:(id)value;
++ (NSString *)usageReport:(NSDictionary *)statistics providerUsage:(NSDictionary *)usage;
 @end
