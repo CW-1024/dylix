@@ -3,6 +3,8 @@
 #import "FLEXDylixStatusWindow.h"
 #import "FLEXDylixRuntime.h"
 #import "FLEXDylixPreferences.h"
+#import "FLEXDylixConnection.h"
+#import <errno.h>
 #import "FLEXGlobalsEntry.h"
 #import "FLEXDylixTouchDriver.h"
 #import "x/ClassDump/UCClassSearchViewController.h"
@@ -202,6 +204,30 @@ static NSDictionary *Command(SmokeChat *chat, NSString *op, NSDictionary *args) 
 }
 - (void)run {
  NSArray *args=NSProcessInfo.processInfo.arguments;
+ if([args containsObject:@"--connection-diagnostics"]){
+  SmokeChat *chat=[[SmokeChat alloc]initWithReport:@"fixture" className:@"UIWindow"];
+  [chat setValue:@"192.168.20.10" forKey:@"host"];[chat setValue:@9432 forKey:@"port"];
+  [chat setValue:@"fixture-private-token" forKey:@"token"];
+  UINavigationController *nav=[[UINavigationController alloc]initWithRootViewController:chat];
+  [FLEXManager.sharedManager presentTool:^{return nav;} completion:nil];
+  Check(Await(^{return chat.viewIfLoaded.window&&!nav.isBeingPresented;},3),@"diagnostic chat presented in UIKit");
+  NSError *failure=FLEXDylixConnectionError(@"192.168.20.10",9432,@"/api/v1/pair",@"connect",ECONNREFUSED,0);
+  [chat performSelector:NSSelectorFromString(@"showError:") withObject:failure];
+  Check(Await(^{return chat.presentedViewController!=nil&&!chat.presentedViewController.isBeingPresented;},2),@"detailed connection error alert presented");
+  UIAlertController *alert=(id)chat.presentedViewController;
+  Check([alert.message containsString:@"拒绝连接"]&&[alert.message containsString:@"尚未进入授权码"],@"alert distinguishes TCP refusal from invalid pairing code");
+  Check([alert.actions filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"title == %@",@"复制诊断"]].count==1,@"error alert offers diagnostic copy action");
+  Check([[chat valueForKey:@"token"] isEqual:@"fixture-private-token"]&&[chat valueForKey:@"lastConnectionError"]==failure,@"failure retains credentials and last diagnostic");
+  [chat dismissViewControllerAnimated:NO completion:nil];Await(^{return !chat.presentedViewController;},2);
+  [chat performSelector:NSSelectorFromString(@"connectTapped")];
+  alert=(id)chat.presentedViewController;
+  Check([alert.actions filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"title == %@",@"上次连接诊断"]].count==1,@"connection settings expose last error without repeated heartbeat dialogs");
+  Check([alert.textFields.firstObject.text isEqual:@"http://192.168.20.10:9432"],@"settings retain actual custom address and port");
+  [chat dismissViewControllerAnimated:NO completion:nil];Await(^{return !chat.presentedViewController;},2);
+  [chat performSelector:NSSelectorFromString(@"showConnectionDiagnostic")];alert=(id)chat.presentedViewController;
+  Check([alert.message containsString:@"POSIX：61"]&&[alert.message containsString:@"阶段：connect"]&&![alert.message containsString:@"fixture-private-token"],@"diagnostic details show safe stage errno and actual target");
+  [self writeSmokeReport];return;
+ }
  NSString *phase=nil;for(NSString *arg in args)if([arg hasPrefix:@"--preferences-"])phase=[arg substringFromIndex:14];
  if(phase){
   NSError *storageError=nil;

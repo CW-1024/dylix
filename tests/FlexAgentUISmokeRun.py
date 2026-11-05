@@ -17,6 +17,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--flex', type=Path, required=True)
 parser.add_argument('--device', default='booted')
 parser.add_argument('--persistence', action='store_true')
+parser.add_argument('--diagnostics', action='store_true')
 args = parser.parse_args()
 app = Path(tempfile.mkdtemp(prefix='flex-ui-smoke-')) / 'FlexAgentUISmoke.app'
 app.mkdir()
@@ -30,7 +31,7 @@ plist = dict(CFBundleIdentifier=bundle, CFBundleName='FLEX Agent UI Smoke',
 entitlements=app.parent/'sim-entitlements.plist'
 entitlements.write_bytes(plistlib.dumps({'application-identifier':'DYLIxTEST.'+bundle,'keychain-access-groups':['DYLIxTEST.'+bundle]}))
 sources = ['FLEXDylixTouchDriver.m', 'FLEXDylixChatViewController.m', 'FLEXDylixRuntime.m',
-           'FLEXDylixAddress.m', 'FLEXDylixPreferences.m', 'FLEXDylixMarkdown.m', 'FLEXDylixStatusWindow.m', 'FLEXGlobalsEntry.m']
+           'FLEXDylixAddress.m', 'FLEXDylixConnection.m', 'FLEXDylixPreferences.m', 'FLEXDylixMarkdown.m', 'FLEXDylixStatusWindow.m', 'FLEXGlobalsEntry.m']
 subprocess.run(['xcrun', '--sdk', 'iphonesimulator', 'clang', '-target',
                 'arm64-apple-ios15.0-simulator', '-fobjc-arc', '-fblocks', '-w',
                 '-I', str(args.flex), str(Path(__file__).with_name('FlexAgentUISmoke.m')),
@@ -61,8 +62,9 @@ print(f"RESULT {len(result['checks'])} checks {result['failures']} failures")
 destination = Path(os.environ.get('FLEX_UI_RESULT', '/private/tmp/flex-agent-ui-results.json'))
 destination.write_text(json.dumps(result, ensure_ascii=False, indent=2))
 print('Report:', destination)
-if args.persistence:
-    for phase in ['write','read','disconnect','cleared']:
+if args.persistence or args.diagnostics:
+    phases=(['write','read','disconnect','cleared'] if args.persistence else [])+(['diagnostics'] if args.diagnostics else [])
+    for phase in phases:
         subprocess.run(['xcrun','simctl','terminate',args.device,bundle],capture_output=True)
         if phase == 'read':
             # Replace the installed App while preserving its data container.
@@ -70,7 +72,7 @@ if args.persistence:
             container=Path(sim('get_app_container',args.device,bundle,'data',capture_output=True,text=True).stdout.strip())
             report=container/'Documents/results.json'
         report.unlink(missing_ok=True)
-        sim('launch',args.device,bundle,'--preferences-'+phase)
+        sim('launch',args.device,bundle,'--connection-diagnostics' if phase=='diagnostics' else '--preferences-'+phase)
         deadline=time.monotonic()+20
         while not report.exists() and time.monotonic()<deadline:
             time.sleep(.2)

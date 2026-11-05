@@ -1,0 +1,1007 @@
+{
+  "version": "1.0.8",
+  "build": 196,
+  "flexVersion": "1.0.0",
+  "date": "2026-11-05",
+  "ipaSHA256": "5a5bc9d56792630a010195d2930fc2bbacbbf3734b666d06018859b9312c3019",
+  "ipaBytes": 139954977,
+  "minimumOS": {
+    "Payload/TheosMobileCompiler.app/Info.plist": "15.0",
+    "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeActivity.appex/Info.plist": "16.2",
+    "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeShare.appex/Info.plist": "15.0"
+  },
+  "archiveVerified": true,
+  "codesignDeepStrictVerified": true,
+  "pluginAdhocSignatureVerified": true,
+  "embeddedPluginManifestVerified": true,
+  "debContainsMatchingDylib": true,
+  "tests": {
+    "socket": {
+      "checks": [
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "pair response and exact cookie parsing",
+          "passed": true
+        },
+        {
+          "name": "Content-Length completes without waiting for server to close",
+          "passed": true
+        },
+        {
+          "name": "existing POST and authentication headers preserved",
+          "passed": true
+        },
+        {
+          "name": "pairing request JSON preserved",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "fragmented status response and session envelope",
+          "passed": true
+        },
+        {
+          "name": "status GET still has no request body",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "wrong code distinguished from TCP failure without echoing server body",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "HTTP 401 classified, redirects not followed",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "HTTP 404 classified, redirects not followed",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "HTTP 423 classified, redirects not followed",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "HTTP 429 classified, redirects not followed",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "HTTP 503 classified, redirects not followed",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "HTTP 302 classified, redirects not followed",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "wrong JSON root/envelope safely rejected",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "wrong JSON root/envelope safely rejected",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "wrong JSON root/envelope safely rejected",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "wrong JSON root/envelope safely rejected",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "wrong JSON root/envelope safely rejected",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "truncated body distinguished from invalid JSON",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "malformed HTTP safely rejected",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "unsupported/ambiguous framing rejected",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "unsupported/ambiguous framing rejected",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "unsupported/ambiguous framing rejected",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "established connection read timeout is bounded and explicit",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "TCP refusal retains errno and does not blame pairing code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "invalid port rejected before connect",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact code",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact token",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact csrf",
+          "passed": true
+        },
+        {
+          "name": "diagnostics redact secret",
+          "passed": true
+        },
+        {
+          "name": "real connect timeout bounded despite saturated backlog",
+          "passed": true
+        },
+        {
+          "name": "actual custom port retained in diagnostic",
+          "passed": true
+        },
+        {
+          "name": "permission advice does not assert unobservable authorization state",
+          "passed": true
+        },
+        {
+          "name": "connection and response failure stages remain distinct",
+          "passed": true
+        }
+      ],
+      "failures": 0,
+      "scope": "production Foundation socket transport with local TCP fixtures; no physical iPad or VPN reproduction"
+    },
+    "UIKit": {
+      "scope": "production chat/runtime + UIKit; transport and FLEX service fixtures",
+      "checks": [
+        {
+          "name": "chat appears in real UIKit",
+          "passed": true
+        },
+        {
+          "name": "send includes exact first model under shared connection id",
+          "passed": true
+        },
+        {
+          "name": "switching shared connection sends newly selected raw model",
+          "passed": true
+        },
+        {
+          "name": "model switch preserves current conversation and project",
+          "passed": true
+        },
+        {
+          "name": "reopening chat restores raw selected model",
+          "passed": true
+        },
+        {
+          "name": "active request blocks misleading model changes",
+          "passed": true
+        },
+        {
+          "name": "conversation grant executes sensitive operation without second authorization dialog",
+          "passed": true
+        },
+        {
+          "name": "other conversation cannot reuse current conversation grant",
+          "passed": true
+        },
+        {
+          "name": "object_info exposes stable locator candidate without using runtime address",
+          "passed": true
+        },
+        {
+          "name": "hook evidence identifies nearest responder controller and labels relationship",
+          "passed": true
+        },
+        {
+          "name": "lifecycle candidates include exact declaring classes for custom overrides",
+          "passed": true
+        },
+        {
+          "name": "declarations never falsely claim lifecycle tracing or proven stability",
+          "passed": true
+        },
+        {
+          "name": "repeated observations preserve instance identity and locator signature",
+          "passed": true
+        },
+        {
+          "name": "AI minimizes its own chat after dismissal completes",
+          "passed": true
+        },
+        {
+          "name": "target App exposed by hiding FLEX overlay",
+          "passed": true
+        },
+        {
+          "name": "minimize preserves session and task",
+          "passed": true
+        },
+        {
+          "name": "same polling timer survives minimize",
+          "passed": true
+        },
+        {
+          "name": "minimize shows a separate live status capsule",
+          "passed": true
+        },
+        {
+          "name": "status window never steals host key window",
+          "passed": true
+        },
+        {
+          "name": "outside capsule touches pass through to target app",
+          "passed": true
+        },
+        {
+          "name": "capsule has its own usable touch target",
+          "passed": true
+        },
+        {
+          "name": "selecting an agent overlay cannot turn it into target App evidence",
+          "passed": true
+        },
+        {
+          "name": "dragged capsule clamps inside visible screen",
+          "passed": true
+        },
+        {
+          "name": "status capsule does not count as target-blocking FLEX overlay",
+          "passed": true
+        },
+        {
+          "name": "screen control displays real operation and no-touch warning",
+          "passed": true
+        },
+        {
+          "name": "build event shows build state without pretending to touch screen",
+          "passed": true
+        },
+        {
+          "name": "text event switches capsule to replying",
+          "passed": true
+        },
+        {
+          "name": "replayed older events cannot restore a stale control warning",
+          "passed": true
+        },
+        {
+          "name": "stalled stream shows elapsed wait instead of invented progress",
+          "passed": true
+        },
+        {
+          "name": "connection loss supersedes stale running status",
+          "passed": true
+        },
+        {
+          "name": "approval event is distinguished from model thinking",
+          "passed": true
+        },
+        {
+          "name": "capsule hides when app leaves foreground",
+          "passed": true
+        },
+        {
+          "name": "capsule restores on foreground without restarting task",
+          "passed": true
+        },
+        {
+          "name": "real timer continues polling while minimized",
+          "passed": true
+        },
+        {
+          "name": "target elements discoverable without manual selection",
+          "passed": true
+        },
+        {
+          "name": "target top inset reports boundary and no actual movement",
+          "passed": true
+        },
+        {
+          "name": "target downward scroll reports actual displacement from negative inset",
+          "passed": true
+        },
+        {
+          "name": "horizontal scrolling preserves the unrelated vertical offset",
+          "passed": true
+        },
+        {
+          "name": "target scroll can move and reach top boundary in the same request",
+          "passed": true
+        },
+        {
+          "name": "in-process touch backend probes actual system interfaces",
+          "passed": true
+        },
+        {
+          "name": "real touch sequence reaches UITapGestureRecognizer",
+          "passed": true
+        },
+        {
+          "name": "real timed touch reaches UILongPressGestureRecognizer",
+          "passed": true
+        },
+        {
+          "name": "real moving touch reaches UIPanGestureRecognizer",
+          "passed": true
+        },
+        {
+          "name": "target UIButton actually activated while chat minimized",
+          "passed": true
+        },
+        {
+          "name": "chat command delivers real double tap",
+          "passed": true
+        },
+        {
+          "name": "chat command reaches real UIPinchGestureRecognizer",
+          "passed": true
+        },
+        {
+          "name": "chat command reaches real UIRotationGestureRecognizer",
+          "passed": true
+        },
+        {
+          "name": "out of window touch rejected",
+          "passed": true
+        },
+        {
+          "name": "explicit zero radius rejected rather than replaced by default",
+          "passed": true
+        },
+        {
+          "name": "native text input edits actual field and emits editing event",
+          "passed": true
+        },
+        {
+          "name": "native text field delegate can reject input",
+          "passed": true
+        },
+        {
+          "name": "text view input reaches native didChange delegate",
+          "passed": true
+        },
+        {
+          "name": "native text view delegate can reject input",
+          "passed": true
+        },
+        {
+          "name": "slider value and native event match",
+          "passed": true
+        },
+        {
+          "name": "segmented value and native event match",
+          "passed": true
+        },
+        {
+          "name": "stepper value and native event match",
+          "passed": true
+        },
+        {
+          "name": "out of native control range is rejected",
+          "passed": true
+        },
+        {
+          "name": "secure text input rejected",
+          "passed": true
+        },
+        {
+          "name": "native switch value changes with valueChanged callback",
+          "passed": true
+        },
+        {
+          "name": "hidden ancestor prevents control mutation",
+          "passed": true
+        },
+        {
+          "name": "pending touch sends cancellation and finishes immediately",
+          "passed": true
+        },
+        {
+          "name": "class header returns bounded first page and continuation",
+          "passed": true
+        },
+        {
+          "name": "unknown runtime class rejected",
+          "passed": true
+        },
+        {
+          "name": "real target screenshot encoded within transport bound",
+          "passed": true
+        },
+        {
+          "name": "tapping capsule reopens retained chat without stopping task or reconnecting",
+          "passed": true
+        },
+        {
+          "name": "AI restores the same chat",
+          "passed": true
+        },
+        {
+          "name": "restored chat hides capsule without ending task",
+          "passed": true
+        },
+        {
+          "name": "target gesture rejected while chat overlay is visible",
+          "passed": true
+        },
+        {
+          "name": "restore keeps runtime and session identity",
+          "passed": true
+        },
+        {
+          "name": "catalog enumerates globals and five named extensions",
+          "passed": true
+        },
+        {
+          "name": "credential UI not exposed by catalog automation",
+          "passed": true
+        },
+        {
+          "name": "AI opens native tool after minimizing chat",
+          "passed": true
+        },
+        {
+          "name": "FLEX UI state reports real visible rows",
+          "passed": true
+        },
+        {
+          "name": "search dispatch reaches native delegate",
+          "passed": true
+        },
+        {
+          "name": "stale row identity rejected before navigation",
+          "passed": true
+        },
+        {
+          "name": "allowed visible row navigates native list",
+          "passed": true
+        },
+        {
+          "name": "detail page cannot invoke arbitrary methods through row selection",
+          "passed": true
+        },
+        {
+          "name": "AI navigates back within FLEX",
+          "passed": true
+        },
+        {
+          "name": "native FLEX list scrolls using returned live ID and actual delta",
+          "passed": true
+        },
+        {
+          "name": "repeated upward scroll at top reports boundary without false success",
+          "passed": true
+        },
+        {
+          "name": "repeated downward scroll at bottom reports zero movement",
+          "passed": true
+        },
+        {
+          "name": "unregistered tool rejected",
+          "passed": true
+        },
+        {
+          "name": "restore dismisses tool and reuses conversation",
+          "passed": true
+        },
+        {
+          "name": "headers extension opens through registered factory",
+          "passed": true
+        },
+        {
+          "name": "embedded extension table exposes visible rows",
+          "passed": true
+        },
+        {
+          "name": "non-table-controller extension row navigates its native delegate",
+          "passed": true
+        },
+        {
+          "name": "disassembly extension opens through registered factory",
+          "passed": true
+        },
+        {
+          "name": "extension navigation restores same conversation",
+          "passed": true
+        },
+        {
+          "name": "manual minimize returns to the existing FLEX menu",
+          "passed": true
+        },
+        {
+          "name": "menu minimize keeps task and polling active without pause",
+          "passed": true
+        },
+        {
+          "name": "native menu presentation reuses retained chat navigation",
+          "passed": true
+        },
+        {
+          "name": "menu reopen resets visibility while retaining session task and timer",
+          "passed": true
+        },
+        {
+          "name": "stop latches locally and requests remote cancellation",
+          "passed": true
+        },
+        {
+          "name": "queued control blocked after stop",
+          "passed": true
+        },
+        {
+          "name": "late approval from stopped task cannot execute in a new task",
+          "passed": true
+        },
+        {
+          "name": "manual minimize preserves polling too",
+          "passed": true
+        },
+        {
+          "name": "clear isolated fixture preferences",
+          "passed": true
+        },
+        {
+          "name": "persist production connection state with real simulator Keychain",
+          "passed": true
+        },
+        {
+          "name": "saved metadata reloads in the same process",
+          "passed": true
+        },
+        {
+          "name": "preferences contain neither credentials nor chat messages or permission grants",
+          "passed": true
+        },
+        {
+          "name": "IP and actual port survive process restart and covering install",
+          "passed": true
+        },
+        {
+          "name": "pairing code and token survive in Keychain",
+          "passed": true
+        },
+        {
+          "name": "fresh production chat restores project, exact model and conversation",
+          "passed": true
+        },
+        {
+          "name": "restored token requires validation before agent polling",
+          "passed": true
+        },
+        {
+          "name": "restored connection validates token and refreshes CSRF",
+          "passed": true
+        },
+        {
+          "name": "restoration verifies project and raw model then fetches real conversation history",
+          "passed": true
+        },
+        {
+          "name": "history rehydrates from authenticated Dylix response",
+          "passed": true
+        },
+        {
+          "name": "explicit disconnect removes saved credentials",
+          "passed": true
+        },
+        {
+          "name": "credentials stay cleared after restart",
+          "passed": true
+        },
+        {
+          "name": "explicit disconnect retains endpoint and previous selections",
+          "passed": true
+        },
+        {
+          "name": "diagnostic chat presented in UIKit",
+          "passed": true
+        },
+        {
+          "name": "detailed connection error alert presented",
+          "passed": true
+        },
+        {
+          "name": "alert distinguishes TCP refusal from invalid pairing code",
+          "passed": true
+        },
+        {
+          "name": "error alert offers diagnostic copy action",
+          "passed": true
+        },
+        {
+          "name": "failure retains credentials and last diagnostic",
+          "passed": true
+        },
+        {
+          "name": "connection settings expose last error without repeated heartbeat dialogs",
+          "passed": true
+        },
+        {
+          "name": "settings retain actual custom address and port",
+          "passed": true
+        },
+        {
+          "name": "diagnostic details show safe stage errno and actual target",
+          "passed": true
+        }
+      ],
+      "failures": 0
+    },
+    "liveProductionServer": {
+      "statusAndCSRF": true,
+      "authenticatedHeartbeat": true,
+      "pairAndCookie": true,
+      "unauthorized401": true
+    },
+    "remoteCore": {
+      "checks": 61,
+      "passed": true,
+      "opensslRegression": true
+    }
+  },
+  "limitations": [
+    "No physical iPhone to iPad VPN or host privacy failure reproduction; user root cause remains unconfirmed",
+    "Physical iOS15 and iPad landscape still require device validation"
+  ]
+}

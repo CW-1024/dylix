@@ -3,11 +3,12 @@
   "files": {
     "dylib": {
       "name": "FLEX++-1.0.0-arm64-rootless.dylib",
-      "sha256": "b38a9d4b3f2cc3f7927a93d1dee93980afcf1c413d499b8ba52b021dd772e530"
+      "sha256": "d8dc349f6b4406132cbf54c32277e91bd8a22475b58f20f1b4b61797eb6f936b"
     },
     "deb": {
       "name": "com.pxx917144686.flex_1.0.0_iphoneos-arm64.deb",
-      "sha256": "72d3599107bcd9119c3c88c2203ddc560fb862387eed4aac2ffedd281bd685f3"
+      "sha256": "56fa1c5b7a0c4a1c390bcfb0441b7bc8e615038c2c253efe7844f6054fb51ef4"
     }
-  }
+  },
+  "build": 196
 }
