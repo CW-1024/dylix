@@ -5,6 +5,7 @@ NSString * _Nullable TFAIBalanceAdapter(NSDictionary *connection);
 NSURL * _Nullable TFAIBalanceURL(NSDictionary *connection, NSString *adapter);
 NSDictionary * _Nullable TFAIBalanceDecode(NSData *data);
 NSDictionary * _Nullable TFAIBalanceParse(NSString *adapter, NSDictionary *payload);
+NSDictionary *TFAIBalanceFailure(NSString *adapter, NSURL *url, NSInteger status, NSError * _Nullable error, NSData * _Nullable data);
 @interface TFAIProviderBalance : NSObject
 + (instancetype)shared;
 - (void)fetch:(NSDictionary *)connection refresh:(BOOL)refresh completion:(void (^)(NSDictionary *result))completion;

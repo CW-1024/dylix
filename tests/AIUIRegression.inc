@@ -103,6 +103,10 @@ UIViewController *TFAIProbeVisualRegression(void){
 @implementation TFAIBalance195FixtureService
 - (void)fetch:(NSDictionary *)c refresh:(BOOL)force completion:(void (^)(NSDictionary *))completion{dispatch_async(dispatch_get_main_queue(),^{completion(@{@"amounts":@[@{@"value":@"12.3456",@"currency":@"USD"}],@"kind":@"credit_limit",@"updatedAt":@(NSDate.date.timeIntervalSince1970-3600),@"checkedAt":@(NSDate.date.timeIntervalSince1970),@"stale":@YES,@"error":@"样例：刷新失败时保留上次结果"});});}
 @end
+@interface TFAIBalance197FixtureService : TFAIProviderBalance @end
+@implementation TFAIBalance197FixtureService
+- (void)fetch:(NSDictionary *)c refresh:(BOOL)force completion:(void (^)(NSDictionary *))completion {dispatch_async(dispatch_get_main_queue(),^{completion(TFAIBalanceFailure(@"siliconflow",[NSURL URLWithString:@"https://api.siliconflow.cn/v1/user/info"],410,nil,[@"{\"code\":30014,\"message\":\"must-not-display-fixture-secret\"}" dataUsingEncoding:NSUTF8StringEncoding]));});}
+@end
 UIViewController *TFAIChat93Regression(void){
  NSString *scope=@"chat93-fixture";NSMutableDictionary *session=[TFAISessions create:scope title:@"会话交互验证"];
  session[@"messages"]=@[@{@"role":@"user",@"messageID":@"fixture-user",@"content":@"检查插件产物并给出总结",@"timestamp":@(NSDate.date.timeIntervalSince1970-30)},@{@"role":@"assistant",@"messageID":@"fixture-analysis",@"content":@"我先读取包信息，再核对文件架构。",@"tool_calls":@[@{@"id":@"fixture-tool"}]},@{@"role":@"tool",@"tool_call_id":@"fixture-tool",@"content":@"已读取测试产物"},@{@"role":@"assistant",@"messageID":@"fixture-final",@"content":@"**检查总结**\n\n产物信息已读取。下方将继续整理结果。",@"timestamp":@(NSDate.date.timeIntervalSince1970)}];
@@ -111,6 +115,27 @@ UIViewController *TFAIChat93Regression(void){
  TFChat93Runtime *runtime=[TFChat93Runtime new];UIViewController *chat=TFAIChatFixtureController(project,scope,runtime,^(NSString *p,NSUInteger l){});
  dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),dispatch_get_main_queue(),^{
  NSMutableArray *checks=[NSMutableArray new];void(^check)(BOOL,NSString *)=^(BOOL pass,NSString *name){[checks addObject:@{@"name":name,@"pass":@(pass)}];};
+ if([NSProcessInfo.processInfo.arguments containsObject:@"--balance197-fixture"]){
+  UITableViewController *balance=(id)TFAIBalanceController(@{@"id":@"balance197-ui-fixture",@"name":@"硅基流动诊断样例（非真实账户）"});
+  [balance setValue:[TFAIBalance197FixtureService new] forKey:@"balanceService"];[chat.navigationController pushViewController:balance animated:NO];
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW,.6*NSEC_PER_SEC),dispatch_get_main_queue(),^{
+   NSIndexPath *index=[NSIndexPath indexPathForRow:0 inSection:0];UITableViewCell *cell=[balance.tableView.dataSource tableView:balance.tableView cellForRowAtIndexPath:index];
+   check([cell.detailTextLabel.text containsString:@"410"]&&[cell.detailTextLabel.text containsString:@"30014"],@"wallet failure shows actual HTTP and API codes");
+   check(![cell.detailTextLabel.text containsString:@"不支持查询"],@"official error remains failure rather than unsupported or zero");
+   check(cell.accessoryType==UITableViewCellAccessoryDetailButton,@"actual endpoint details accessible through info button");
+   [balance.tableView.delegate tableView:balance.tableView accessoryButtonTappedForRowWithIndexPath:index];
+   dispatch_after(dispatch_time(DISPATCH_TIME_NOW,.4*NSEC_PER_SEC),dispatch_get_main_queue(),^{
+    UIAlertController *alert=(id)balance.presentedViewController;check([alert.title isEqual:@"余额查询详情"]&&[alert.message containsString:@"GET https://api.siliconflow.cn/v1/user/info"],@"diagnostic presents actual official request URL");
+    check([alert.message containsString:@"410"]&&![alert.message containsString:@"must-not-display-fixture-secret"],@"diagnostic excludes server-echoed secret");
+    check([alert.actions filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"title == %@",@"复制详情"]].count==1,@"diagnostic copy action exists");
+    NSDictionary *automatic=@{@"baseURL":@"https://relay.invalid/prefix/v1/responses",@"protocol":@"responses"};
+    check([TFAIBalanceURL(automatic,TFAIBalanceAdapter(automatic)).absoluteString isEqual:@"https://relay.invalid/prefix/v1/usage"],@"production protocol validator permits normalized auto-detection");
+    check(!TFAIBalanceAdapter(@{@"baseURL":@"http://relay.invalid/v1",@"protocol":@"chat"}),@"production protocol validator preserves HTTP opt-in");
+    NSString *docs=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
+    [[NSJSONSerialization dataWithJSONObject:checks options:NSJSONWritingPrettyPrinted error:nil] writeToFile:[docs stringByAppendingPathComponent:@"balance197-ui-tests.json"] atomically:YES];
+   });
+  });return;
+ }
  if([NSProcessInfo.processInfo.arguments containsObject:@"--balance195-fixture"]){UIViewController *balance=TFAIBalanceController(@{@"id":@"balance-ui-fixture",@"name":@"余额界面样例（非真实账户）"});[balance setValue:[TFAIBalance195FixtureService new] forKey:@"balanceService"];[chat.navigationController pushViewController:balance animated:NO];return;}
  if([NSProcessInfo.processInfo.arguments containsObject:@"--usage195-fixture"]){
  NSURL *directory=[NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString] isDirectory:YES];TFAIUsageStore *store=[[TFAIUsageStore alloc]initWithDirectory:directory];

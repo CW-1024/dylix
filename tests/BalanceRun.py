@@ -11,8 +11,10 @@ class Handler(BaseHTTPRequestHandler):
   if self.path.startswith('/redirect/'):
    self.send_response(302);self.send_header('Location','/must-not-follow');self.end_headers();return
   if self.path.startswith('/ok/') and count>1:self.send_response(503);self.end_headers();return
+  if self.path.startswith('/gone/') or (self.path.startswith('/recover/') and count==1):self.send_response(410);self.end_headers();return
+  if self.path.startswith('/missing/'):self.send_response(404);self.end_headers();return
   if self.path.startswith('/single/'):time.sleep(.1)
-  body=(b'x'*70000 if self.path.startswith('/large/') else json.dumps(dict(isValid=True,mode='unrestricted',balance='12.34',unit='USD')).encode())
+  body=(b'x'*70000 if self.path.startswith('/large/') else json.dumps(dict(isValid=True,mode='subscription' if self.path.startswith('/subscription/') else 'unrestricted',balance='12.34',unit='USD')).encode())
   self.send_response(200);self.send_header('Content-Length',str(len(body)));self.end_headers()
   try:self.wfile.write(body)
   except BrokenPipeError:pass
@@ -25,6 +27,7 @@ try:
   subprocess.run([str(binary),f'http://127.0.0.1:{server.server_port}'],check=True,timeout=60)
  assert counts.get('/ok/v1/usage')==2,counts
  assert counts.get('/single/v1/usage')==1,counts
+ assert counts.get('/auto/v1/usage')==1 and not counts.get('/auto/v1/responses/v1/usage'),counts
  assert not counts.get('/must-not-follow'),counts
  print('Balance network: cache, single-flight and redirect assertions passed')
 finally:server.shutdown()
