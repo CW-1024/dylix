@@ -1,0 +1,130 @@
+{
+  "version": "1.0.8",
+  "build": 195,
+  "flexVersion": "1.0.0",
+  "date": "2026-11-05",
+  "ipaSHA256": "23cb34e279ad4f132163fac02b43017a37ebb65cca2a37e2ea402141f7753810",
+  "ipaBytes": 139945185,
+  "minimumOS": {
+    "Payload/TheosMobileCompiler.app/Info.plist": "15.0",
+    "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeActivity.appex/Info.plist": "16.2",
+    "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeShare.appex/Info.plist": "15.0"
+  },
+  "archiveVerified": true,
+  "codesignDeepStrictVerified": true,
+  "simulatorFixturesExcludedFromDevice": true,
+  "tests": {
+    "usage": {
+      "passed": true,
+      "evidence": "28 checks passed"
+    },
+    "balance": {
+      "passed": true,
+      "evidence": "45 checks passed"
+    },
+    "transport": {
+      "passed": true,
+      "evidence": "119 checks 0 failures"
+    },
+    "tools": {
+      "passed": true,
+      "evidence": "348 checks passed"
+    },
+    "registry": {
+      "passed": true,
+      "evidence": "174 checks"
+    },
+    "projection": {
+      "passed": true,
+      "evidence": "58 context projection checks"
+    },
+    "runtimeUsage": {
+      "passed": true,
+      "evidence": "Usage actual runtime integration passed"
+    },
+    "runtimeContext": {
+      "passed": true,
+      "evidence": "PASS context runtime regression"
+    },
+    "runtimePersona": {
+      "passed": true,
+      "evidence": "Persona actual runtime integration passed"
+    },
+    "runtimeAgent": {
+      "passed": true,
+      "evidence": "Agent runtime history regression passed"
+    },
+    "runtimeRegistry": {
+      "passed": true,
+      "evidence": "13 checks"
+    },
+    "runtimeBudget": {
+      "passed": true,
+      "evidence": "Runtime unlimited-loop tests passed"
+    }
+  },
+  "nativeUIChecks": [
+    {
+      "name": "usage UI reads persisted provider counters with missing coverage",
+      "pass": true
+    },
+    {
+      "name": "usage groups local calendar date",
+      "pass": true
+    },
+    {
+      "name": "session grouping",
+      "pass": true
+    },
+    {
+      "name": "model grouping",
+      "pass": true
+    },
+    {
+      "name": "connection grouping",
+      "pass": true
+    },
+    {
+      "name": "today includes local midnight",
+      "pass": true
+    },
+    {
+      "name": "seven-day filter excludes preceding calendar day",
+      "pass": true
+    },
+    {
+      "name": "thirty-day filter",
+      "pass": true
+    },
+    {
+      "name": "custom date interval has exclusive next-midnight end",
+      "pass": true
+    },
+    {
+      "name": "chat entry isolates session within project",
+      "pass": true
+    },
+    {
+      "name": "native balance page exists without configured provider",
+      "pass": true
+    },
+    {
+      "name": "usage and wallet settings entries",
+      "pass": true
+    }
+  ],
+  "visualQA": [
+    "light statistics",
+    "dark statistics",
+    "session request details",
+    "custom dates application",
+    "dark balance stale result"
+  ],
+  "liveProviderWalletAccountsTested": false,
+  "limitations": [
+    "Usage ledger starts with this version; old conversations cannot be accurately backfilled.",
+    "Chat runtime requests only; capability probes are excluded.",
+    "Cache counts are provider tokens, not disk bytes or server cache capacity.",
+    "Wallet fixtures do not prove live account permissions or nonstandard relay compatibility."
+  ]
+}

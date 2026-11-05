@@ -1,3 +1,4 @@
+#import "../Providers/TFAIRegistry.h"
 #import "../Registry/TFAIToolRegistry.h"
 #import "../Registry/TFAIToolAvailability.h"
 #import "../Registry/TFAIToolIsolation.h"
@@ -17,6 +18,7 @@
 #import "TFAIMessageMetadata.h"
 #import "TFAIRecovery.h"
 #import "TFAIContextProjection.h"
+#import "../Usage/TFAIUsageStore.h"
 #import "TFAIDeveloperPrompt.h"
 #import "../Persona/TFAIPersona.h"
 #import "../Binary/TFAIBinary.h"
@@ -49,6 +51,7 @@ static NSError *AIError(NSString *message) { return [NSError errorWithDomain:@"T
 @property NSUInteger generation,rounds,toolCount,receivedBytes;
 @property NSTimeInterval started;
 @property NSString *responseMessageID;
+@property NSString *usageRequestID;
 @property NSNumber *responseTimestamp;
 @property BOOL running;
 @property NSString *backgroundToken,*checkpointRunID,*checkpointState;
@@ -70,7 +73,7 @@ static NSError *AIError(NSString *message) { return [NSError errorWithDomain:@"T
 @end
 @implementation TFProjectAIRuntime
 - (instancetype)init { if((self=[super init])){_completedCalls=[NSMutableSet new];[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(background) name:UIApplicationDidEnterBackgroundNotification object:nil];}return self; }
-- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self];[_transport cancel];[_toolbox cancel];[_webTools cancel];[_readOnlyBrowser cancel];[_classDumpProgress cancel]; }
+- (void)dealloc { [[TFAIUsageStore shared] finish:_usageRequestID status:@"interrupted"];[[NSNotificationCenter defaultCenter] removeObserver:self];[_transport cancel];[_toolbox cancel];[_webTools cancel];[_readOnlyBrowser cancel];[_classDumpProgress cancel]; }
 - (void)checkpoint:(BOOL)durable {if(!self.checkpointRunID.length||!self.event)return;NSTimeInterval now=NSProcessInfo.processInfo.systemUptime;if(!durable&&now-self.checkpointTime<2)return;self.checkpointTime=now;NSMutableArray *transcript=[[self publicMessages] mutableCopy];if(self.response.length)[transcript addObject:@{@"role":@"assistant",@"content":[self.response copy],@"messageID":self.responseMessageID?:NSUUID.UUID.UUIDString,@"timestamp":self.responseTimestamp?:@(NSDate.date.timeIntervalSince1970)}];NSDictionary *checkpoint=@{@"schema":@1,@"runID":self.checkpointRunID,@"sequence":@(++self.checkpointSequence),@"savedAt":@(NSDate.date.timeIntervalSince1970),@"active":@(self.running),@"state":self.running?@"running":(self.checkpointState?:@"interrupted"),@"messages":transcript,@"pendingTools":self.activeToolRecords.allValues?:@[],@"rounds":@(self.rounds),@"receivedBytes":@(self.receivedBytes),@"recoveryMode":@"readOnlyReview"};self.event(@{@"type":@"checkpoint",@"checkpoint":checkpoint,@"durable":@(durable)});}
 - (void)emit:(NSDictionary *)event {NSString *type=event[@"type"];if([type isEqual:@"tool_started"]&&event[@"id"]){if(!self.activeToolRecords)self.activeToolRecords=[NSMutableDictionary new];self.activeToolRecords[event[@"id"]]=@{@"id":event[@"id"],@"name":event[@"name"]?:@"tool",@"state":@"outcomeUnknown"};}else if([type isEqual:@"tool_result"]&&event[@"id"])[self.activeToolRecords removeObjectForKey:event[@"id"]];TFAIBackgroundUpdate(self.backgroundToken,event);if(self.event)self.event(event);if(self.running){BOOL boundary=[@[@"assistant_start",@"tool_started",@"tool_result",@"waiting_approval"] containsObject:type];if(boundary||[@[@"text",@"analysis_summary",@"tool_progress"] containsObject:type])[self checkpoint:boundary];}}
 - (NSArray *)publicMessages {NSMutableArray *a=[NSMutableArray arrayWithArray:self.compactedHistoryPrefix?:@[]];for(NSDictionary *m in self.messages)if(![m[@"role"] isEqual:@"system"])[a addObject:m];return a;}
@@ -83,6 +86,7 @@ static NSError *AIError(NSString *message) { return [NSError errorWithDomain:@"T
 }
 - (void)finish:(NSString *)state message:(NSString *)message {
  if(!self.running)return;
+ [[TFAIUsageStore shared] finish:self.usageRequestID status:[state isEqual:@"completed"]?@"completed":state];self.usageRequestID=nil;
  self.pendingFlexImage=nil;
  self.running=NO;if(![state isEqual:@"completed"]&&[self.projectID isEqual:@"general"]&&self.bridge)self.bridge(@"cancel_workspace",@{},^(NSDictionary *r,NSError *e){});self.checkpointState=state;if(![state isEqual:@"completed"])[self revokePermission:@"任务已中断，已恢复逐次批准"];self.generation++;[self.transport cancel];[self.toolbox cancel];[self.webTools cancel];[self.readOnlyBrowser cancel];[self.classDumpProgress cancel];
  // Never save an assistant tool-call message without its matching results.
@@ -183,13 +187,15 @@ if([context[@"binaryIDs"] count])[schemas addObjectsFromArray:TFAIBinarySchemas(
  NSArray *projected=[TFAIContextProjection project:outbound schemas:schemas statistics:&contextStatistics error:&contextError];
  [self emit:@{@"type":@"context_usage",@"statistics":contextStatistics?:@{}}];
  if(!projected){[self fail:contextError.localizedDescription?:@"上下文投影失败，完整会话已保留。"];return;}
+ self.usageRequestID=self.responseMessageID;[[TFAIUsageStore shared] begin:self.usageRequestID project:self.projectID session:self.sessionID connection:self.connection wire:TFAIWireProtocol(self.connection[@"protocol"])];
  [self.transport send:projected connection:self.connection tools:schemas event:^(NSDictionary *event){
   TFProjectAIRuntime *s=weak;if(!s.running||token!=s.generation)return;
   NSString *type=event[@"type"];
-  if([type isEqual:@"text"]){NSString *text=event[@"text"]?:@"";s.receivedBytes+=[text lengthOfBytesUsingEncoding:NSUTF8StringEncoding];if(s.receivedBytes>1024*1024){[s fail:@"本轮输出超过 1 MB，已停止；部分输出已保留。"];return;}[s.response appendString:text];[s emit:event];}
+  if([type isEqual:@"usage"]){if([event[@"usage"] isKindOfClass:NSDictionary.class])[[TFAIUsageStore shared] update:s.usageRequestID usage:event[@"usage"]];[s emit:event];}
+  else if([type isEqual:@"text"]){NSString *text=event[@"text"]?:@"";s.receivedBytes+=[text lengthOfBytesUsingEncoding:NSUTF8StringEncoding];if(s.receivedBytes>1024*1024){[s fail:@"本轮输出超过 1 MB，已停止；部分输出已保留。"];return;}[s.response appendString:text];[s emit:event];}
   else if([type isEqual:@"tool_call"]){BOOL registered=NO;for(NSDictionary *schema in s.advertisedSchemas)if([schema[@"name"] isEqual:event[@"name"]])registered=YES;if(!registered){[s fail:s.root.length?@"当前为问答模式，此项目操作未执行。请切换开发模式后重新提出请求。":@"此工具尚未注册。开发任务可先创建、克隆或选择项目，再使用返回的项目工具。"];return;}if((s.connection[@"toolsEnabled"]&&![s.connection[@"toolsEnabled"] boolValue])||[s.connection[@"capabilities"][@"tools"] isEqual:@"unsupported"]){[s fail:@"当前连接已关闭工具调用，模型返回的操作未执行。"];return;}if(![event[@"id"] isKindOfClass:NSString.class]||![event[@"name"] isKindOfClass:NSString.class]||![event[@"arguments"] isKindOfClass:NSDictionary.class]){[s fail:@"模型工具请求格式不完整，未执行。"];return;}for(NSDictionary *c in s.calls)if([c[@"id"] isEqual:event[@"id"]]){if(![c[@"arguments"] isEqual:event[@"arguments"]]||![c[@"name"] isEqual:event[@"name"]])[s fail:@"重复工具 ID 的参数发生变化，已停止。 "];return;}[s.calls addObject:@{@"id":event[@"id"],@"name":event[@"name"],@"arguments":event[@"arguments"]}];[s emit:event];}
   else if([type isEqual:@"provider_items"]){s.providerMetadata[@"provider_items"]=event[@"items"]?:@[];for(NSString *key in @[@"providerProtocol",@"providerModel",@"providerConnectionID"])if(event[key])s.providerMetadata[key]=event[key];}
-  else if([type isEqual:@"done"]){TFAIBackgroundUpdate(s.backgroundToken,@{@"type":@"model_completed"});if(!s.calls.count&&![[s.response stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] length]){[s fail:@"服务端结束了本次响应，但没有返回正文或工具调用。已保留此前结果，请检查连接后继续。"];return;}NSMutableDictionary *m=[@{@"role":@"assistant",@"content":[s.response copy],@"messageID":s.responseMessageID,@"timestamp":s.responseTimestamp} mutableCopy];[m addEntriesFromDictionary:s.providerMetadata];if(s.calls.count)m[@"tool_calls"]=[s.calls copy];[s.messages addObject:m];s.response=nil;if(s.calls.count)[s runCall:0];else[s finish:@"completed" message:nil];}
+  else if([type isEqual:@"done"]){[[TFAIUsageStore shared] finish:s.usageRequestID status:@"completed"];s.usageRequestID=nil;TFAIBackgroundUpdate(s.backgroundToken,@{@"type":@"model_completed"});if(!s.calls.count&&![[s.response stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] length]){[s fail:@"服务端结束了本次响应，但没有返回正文或工具调用。已保留此前结果，请检查连接后继续。"];return;}NSMutableDictionary *m=[@{@"role":@"assistant",@"content":[s.response copy],@"messageID":s.responseMessageID,@"timestamp":s.responseTimestamp} mutableCopy];[m addEntriesFromDictionary:s.providerMetadata];if(s.calls.count)m[@"tool_calls"]=[s.calls copy];[s.messages addObject:m];s.response=nil;if(s.calls.count)[s runCall:0];else[s finish:@"completed" message:nil];}
   else if([type isEqual:@"error"]){TFAIBackgroundUpdate(s.backgroundToken,@{@"type":@"transport_error",@"code":event[@"code"]?:@0});[s fail:event[@"message"]?:@"模型请求失败"];}
   else [s emit:event];
  }];

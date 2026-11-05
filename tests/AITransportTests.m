@@ -19,7 +19,10 @@ static void ContextWireTests(void){
  }
 }
 static void ParserTests(void){
+ NSArray *incomplete=Decode(@"responses",Frame(@{@"type":@"response.incomplete",@"response":@{@"usage":@{@"input_tokens":@100,@"output_tokens":@5}}}),3);Check(Type(incomplete,@"usage").count==1&&Type(incomplete,@"error").count==1,@"incomplete Responses retains reported usage before error");NSArray *capped=Decode(@"anthropic",Frame(@{@"type":@"message_delta",@"delta":@{@"stop_reason":@"max_tokens"},@"usage":@{@"output_tokens":@42}}),2);Check(Type(capped,@"usage").count==1&&Type(capped,@"error").count==1,@"Anthropic output limit retains usage before error");
+
  NSDictionary *c=@{@"id":@"fixture",@"protocol":@"chat",@"baseURL":@"https://api.example.test",@"model":@"fixture"};NSError *error=nil;
+ Check([TFAIRequestBody(@[],c,@[],YES,nil)[@"stream_options"][@"include_usage"] boolValue],@"Chat streams request provider usage");NSMutableDictionary *legacy=[c mutableCopy];legacy[@"omitStreamUsage"]=@YES;Check(!TFAIRequestBody(@[],legacy,@[],YES,nil)[@"stream_options"],@"legacy relay may opt out without retrying the model request");Check(!TFAIRequestBody(@[],c,@[],NO,nil)[@"stream_options"],@"nonstreaming requests omit stream options");
  Check([TFAIEndpoint(c,NO,&error).absoluteString isEqual:@"https://api.example.test/v1/chat/completions"],@"default v1 endpoint");
  for(NSString *proto in @[@"chat",@"responses",@"anthropic"]){NSMutableDictionary *p=[c mutableCopy];p[@"protocol"]=proto;p[@"baseURL"]=@"https://api.example.test/proxy/v1/";Check([TFAIEndpoint(p,NO,nil).path hasPrefix:@"/proxy/v1/"],[proto stringByAppendingString:@" preserves proxy prefix"]);}
  for(NSString *bad in @[@"http://api.example.test/v1",@"https://secret@api.example.test/v1",@"https://api.example.test/v1?key=secret",@"file:///tmp/model",@"https://api.example.test/#secret"]){NSMutableDictionary *p=[c mutableCopy];p[@"baseURL"]=bad;Check(TFAIEndpoint(p,NO,nil)==nil,@"reject credential or insecure URL");}
