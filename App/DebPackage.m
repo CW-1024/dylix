@@ -1,15 +1,17 @@
 #import "DebPackage.h"
+#import "../Vendor/libarchive-headers/archive.h"
+#import "../Vendor/libarchive-headers/archive_entry.h"
 
 static void octal(char *field, size_t length, unsigned long long value) {
     snprintf(field, length, "%0*llo", (int)length - 1, value);
 }
-static void tarEntry(NSMutableData *tar, NSString *path, NSData *contents, BOOL executable) {
+static void tarRecord(NSMutableData *tar, NSString *path, NSData *contents, BOOL executable, BOOL directory) {
     char header[512] = {0};
     NSString *leaf=path; if([path lengthOfBytesUsingEncoding:NSUTF8StringEncoding]>100){leaf=path.lastPathComponent;strncpy(header+345,path.stringByDeletingLastPathComponent.UTF8String,154);}strncpy(header, leaf.UTF8String,100);
-    octal(header + 100, 8, executable ? 0755 : 0644);
+    octal(header + 100, 8, directory || executable ? 0755 : 0644);
     octal(header + 108, 8, 0); octal(header + 116, 8, 0);
     octal(header + 124, 12, contents.length); octal(header + 136, 12, 0);
-    memset(header + 148, ' ', 8); header[156] = '0';
+    memset(header + 148, ' ', 8); header[156] = directory ? '5' : '0';
     memcpy(header + 257, "ustar", 5); memcpy(header + 263, "00", 2);
     memcpy(header + 265, "root", 4); memcpy(header + 297, "wheel", 5);
     unsigned checksum = 0;
@@ -18,6 +20,62 @@ static void tarEntry(NSMutableData *tar, NSString *path, NSData *contents, BOOL 
     [tar appendBytes:header length:sizeof(header)]; [tar appendData:contents];
     NSUInteger padding = (512 - contents.length % 512) % 512;
     [tar increaseLengthBy:padding];
+}
+static void tarEntry(NSMutableData *tar, NSString *path, NSData *contents, BOOL executable, NSMutableSet *directories) {
+    // Package managers and bundle importers need explicit parents, in parent-first order.
+    // Keep directory identity separate from file destinations so a parent is emitted once.
+    NSString *parent = @".";
+    if (![directories containsObject:parent]) {
+        tarRecord(tar, @"./", NSData.data, NO, YES);
+        [directories addObject:parent];
+    }
+    for (NSString *component in path.stringByDeletingLastPathComponent.pathComponents) {
+        if ([component isEqual:@"."]) continue;
+        parent = [parent stringByAppendingPathComponent:component];
+        if (![directories containsObject:parent]) {
+            // Type '5' identifies a directory. Omit the optional trailing slash so
+            // TrollFools' TarReader sees resource roots ending exactly in ".bundle".
+            tarRecord(tar, parent, NSData.data, NO, YES);
+            [directories addObject:parent];
+        }
+    }
+    tarRecord(tar, path, contents, executable, NO);
+}
+static la_ssize_t gzipWrite(struct archive *archive, void *context, const void *bytes, size_t length) {
+    [(__bridge NSMutableData *)context appendBytes:bytes length:length];
+    return (la_ssize_t)length;
+}
+static NSData *gzipTar(NSData *tar, NSError **error) {
+    // Use the system libarchive already linked by Dylix; no subprocess or new dependency.
+    NSMutableData *compressed = [NSMutableData data];
+    struct archive *writer = archive_write_new();
+    struct archive_entry *entry = archive_entry_new();
+    BOOL ok = writer && entry;
+    if (ok) ok = archive_write_set_format_raw(writer) == ARCHIVE_OK &&
+        archive_write_add_filter_gzip(writer) == ARCHIVE_OK &&
+        archive_write_set_filter_option(writer, "gzip", "compression-level", "6") == ARCHIVE_OK &&
+        archive_write_set_bytes_per_block(writer, 0) == ARCHIVE_OK &&
+        archive_write_open(writer, (__bridge void *)compressed, NULL, gzipWrite, NULL) == ARCHIVE_OK;
+    if (ok) {
+        archive_entry_set_pathname(entry, "archive.tar");
+        archive_entry_set_filetype(entry, AE_IFREG);
+        archive_entry_set_perm(entry, 0644);
+        archive_entry_set_size(entry, (la_int64_t)tar.length);
+        ok = archive_write_header(writer, entry) == ARCHIVE_OK;
+        NSUInteger offset = 0;
+        while (ok && offset < tar.length) {
+            NSUInteger count = MIN((NSUInteger)65536, tar.length - offset);
+            la_ssize_t written = archive_write_data(writer, (const char *)tar.bytes + offset, count);
+            if (written <= 0 || (NSUInteger)written > count) ok = NO;
+            else offset += (NSUInteger)written;
+        }
+        if (ok) ok = archive_write_finish_entry(writer) == ARCHIVE_OK;
+        if (ok) ok = archive_write_close(writer) == ARCHIVE_OK;
+    }
+    if (!ok && error) *error = [NSError errorWithDomain:@"Compiler" code:7 userInfo:@{NSLocalizedDescriptionKey:@"DEB gzip 压缩失败，未生成安装包"}];
+    if (entry) archive_entry_free(entry);
+    if (writer) archive_write_free(writer);
+    return ok ? compressed : nil;
 }
 static void arEntry(NSMutableData *ar, const char *name, NSData *contents) {
     char header[61];
@@ -73,12 +131,13 @@ NSData *TMCDebPackageWithResources(NSData *dylib, NSString *name, NSData *filter
     }
     if (![control hasSuffix:@"\n"]) control = [control stringByAppendingString:@"\n"];
     NSMutableData *controlTar = [NSMutableData data];
-    tarEntry(controlTar, @"./control", [control dataUsingEncoding:NSUTF8StringEncoding], NO);
+    NSMutableSet *controlDirectories = [NSMutableSet set], *dataDirectories = [NSMutableSet set];
+    tarEntry(controlTar, @"./control", [control dataUsingEncoding:NSUTF8StringEncoding], NO, controlDirectories);
     NSMutableData *dataTar = [NSMutableData data];
     NSString *directory=[fields[@"architecture"] isEqual:@"iphoneos-arm64"]?@"./var/jb/Library/MobileSubstrate/DynamicLibraries/":@"./Library/MobileSubstrate/DynamicLibraries/";
     NSString *base = [directory stringByAppendingString:name];
-    tarEntry(dataTar, [base stringByAppendingString:@".dylib"], dylib, YES);
-    tarEntry(dataTar, [base stringByAppendingString:@".plist"], filterPlist, NO);
+    tarEntry(dataTar, [base stringByAppendingString:@".dylib"], dylib, YES, dataDirectories);
+    tarEntry(dataTar, [base stringByAppendingString:@".plist"], filterPlist, NO, dataDirectories);
     NSMutableSet *destinations=[NSMutableSet setWithArray:@[[base stringByAppendingString:@".dylib"],[base stringByAppendingString:@".plist"]]];
     NSMutableArray *entries=[NSMutableArray new];
     NSString *layout=[root stringByAppendingPathComponent:@"layout"];
@@ -105,15 +164,24 @@ NSData *TMCDebPackageWithResources(NSData *dylib, NSString *name, NSData *filter
       if([destination hasPrefix:@"var/jb/"])destination=[destination substringFromIndex:7];
       NSString *path=script?[@"./" stringByAppendingString:destination.lastPathComponent]:[([fields[@"architecture"] isEqual:@"iphoneos-arm64"]?@"./var/jb/":@"./") stringByAppendingString:destination];
       NSString *key=script?[@"control:" stringByAppendingString:path]:path;
+      NSMutableSet *directories = script ? controlDirectories : dataDirectories;
+      BOOL pathConflict = [directories containsObject:path];
+      for (NSString *parent = path.stringByDeletingLastPathComponent; parent.length && ![parent isEqual:@"."]; parent = parent.stringByDeletingLastPathComponent) {
+          if ([destinations containsObject:script ? [@"control:" stringByAppendingString:parent] : parent]) { pathConflict = YES; break; }
+      }
       unsigned long long size=[a[NSFileSize] unsignedLongLongValue];total+=size;
-      if([destinations containsObject:key]||size>64*1024*1024||total>128*1024*1024||[path.lastPathComponent lengthOfBytesUsingEncoding:NSUTF8StringEncoding]>100||[path.stringByDeletingLastPathComponent lengthOfBytesUsingEncoding:NSUTF8StringEncoding]>154){if(error)*error=[NSError errorWithDomain:@"Compiler" code:6 userInfo:@{NSLocalizedDescriptionKey:@"资源重复、路径过长或超过打包限制（单文件 64 MB / 总计 128 MB）"}];return nil;}
+      if(pathConflict||[destinations containsObject:key]||size>64*1024*1024||total>128*1024*1024||[path.lastPathComponent lengthOfBytesUsingEncoding:NSUTF8StringEncoding]>100||[path.stringByDeletingLastPathComponent lengthOfBytesUsingEncoding:NSUTF8StringEncoding]>154){if(error)*error=[NSError errorWithDomain:@"Compiler" code:6 userInfo:@{NSLocalizedDescriptionKey:@"资源重复、目录与文件冲突、路径过长或超过打包限制（单文件 64 MB / 总计 128 MB）"}];return nil;}
       [destinations addObject:key];NSData *contents=[NSData dataWithContentsOfFile:full options:0 error:error];if(!contents)return nil;
-      tarEntry(script?controlTar:dataTar,path,contents,script||([a[NSFilePosixPermissions] unsignedIntegerValue]&0111));
+      tarEntry(script?controlTar:dataTar,path,contents,script||([a[NSFilePosixPermissions] unsignedIntegerValue]&0111),script?controlDirectories:dataDirectories);
     }
     [controlTar increaseLengthBy:1024];
     [dataTar increaseLengthBy:1024];
+    NSData *controlGzip = gzipTar(controlTar, error);
+    if (!controlGzip) return nil;
+    NSData *dataGzip = gzipTar(dataTar, error);
+    if (!dataGzip) return nil;
     NSMutableData *deb = [NSMutableData dataWithBytes:"!<arch>\n" length:8];
     arEntry(deb, "debian-binary", [@"2.0\n" dataUsingEncoding:NSASCIIStringEncoding]);
-    arEntry(deb, "control.tar", controlTar); arEntry(deb, "data.tar", dataTar);
+    arEntry(deb, "control.tar.gz", controlGzip); arEntry(deb, "data.tar.gz", dataGzip);
     return deb;
 }

@@ -33,13 +33,13 @@ def audit(build,config,project):
   while at<len(raw):
    h=raw[at:at+60];assert h[58:60]==b'`\n';n=int(h[48:58]);members[h[:16].decode().strip().rstrip('/')]=raw[at+60:at+60+n];at+=60+n+n%2
   assert members['debian-binary']==b'2.0\n'
-  with tarfile.open(fileobj=io.BytesIO(members['control.tar'])) as tf:ctl=tf.extractfile('./control').read().decode()
+  with tarfile.open(fileobj=io.BytesIO(members.get('control.tar.gz', members.get('control.tar')))) as tf:ctl=tf.extractfile('./control').read().decode()
   metadata=fields(ctl);arch={'rootless':'iphoneos-arm64','rootful':'iphoneos-arm','roothide':'iphoneos-arm64e'}[scheme];assert metadata['architecture']==arch
   original=project/'control'
   if original.exists():
    original=fields(original.read_text());assert all(metadata.get(k)==original[k] for k in ['package','version','name'] if k in original)
-  with tarfile.open(fileobj=io.BytesIO(members['data.tar'])) as tf:
-   entries=tf.getmembers();assert len(entries)==2 and all(x.isfile() and x.uid==0 and x.gid==0 for x in entries)
+  with tarfile.open(fileobj=io.BytesIO(members.get('data.tar.gz', members.get('data.tar')))) as tf:
+   entries=[e for e in tf.getmembers() if e.isfile()];assert len(entries)==2 and all(x.isfile() and x.uid==0 and x.gid==0 for x in entries)
    libentry=next(x for x in entries if x.name.endswith('.dylib'));plistentry=next(x for x in entries if x.name.endswith('.plist'));lib=tf.extractfile(libentry).read();fil=tf.extractfile(plistentry).read();paths=[x.name for x in entries];assert libentry.mode==0o755 and plistentry.mode==0o644
   prefix='./var/jb/Library/MobileSubstrate/DynamicLibraries/' if scheme=='rootless' else './Library/MobileSubstrate/DynamicLibraries/';assert all(x.startswith(prefix) for x in paths)
   assert lib==(build/variant['dylib']).read_bytes();header=struct.unpack('<IiiI',lib[:16]);assert header==(0xfeedfacf,0x100000c,0,6)

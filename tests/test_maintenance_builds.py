@@ -22,9 +22,9 @@ with tempfile.TemporaryDirectory(prefix='tf-maint-builds-') as temp:
    raw=(build/package['name']).read_bytes();at=8;members={}
    while at<len(raw):
     h=raw[at:at+60];size=int(h[48:58]);members[h[:16].decode().strip().rstrip('/')]=raw[at+60:at+60+size];at+=60+size+size%2
-   with tarfile.open(fileobj=io.BytesIO(members['data.tar'])) as t:
+   with tarfile.open(fileobj=io.BytesIO(members.get('data.tar.gz', members.get('data.tar')))) as t:
     prefix='./var/jb/' if package['scheme']=='rootless' else './';assert prefix+'Library/Application Support/Maintenance.bundle/test.txt' in t.getnames()
-   with tarfile.open(fileobj=io.BytesIO(members['control.tar'])) as t:
+   with tarfile.open(fileobj=io.BytesIO(members.get('control.tar.gz', members.get('control.tar')))) as t:
     control=t.extractfile('./control').read().decode();arch={'rootless':'iphoneos-arm64','rootful':'iphoneos-arm','roothide':'iphoneos-arm64e'}[package['scheme']];assert 'Architecture: '+arch in control
   assert len(report.get('packages',[]))==(3 if label=='three-packages' else 0 if label=='disabled-deb' else 1)
   (O/(label+'-report.json')).write_text(json.dumps(report,ensure_ascii=False,indent=2));(O/(label+'-build.log')).write_text(log);results.append({'case':label,'passed':True,'packages':len(report.get('packages',[])),'dylibs':len(dylibs),'unicodeLogs':True});print(label,'PASS',flush=True)

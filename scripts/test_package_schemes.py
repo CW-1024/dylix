@@ -41,9 +41,9 @@ for scheme in ['rootless','rootful','roothide']:
    deb=next(dest.glob('*.deb')).read_bytes();assert deb[:8]==b'!<arch>\n';members={};at=8
    while at<len(deb):
     head=deb[at:at+60];size=int(head[48:58]);members[head[:16].decode().strip().rstrip('/')]=deb[at+60:at+60+size];at+=60+size+(size%2)
-   with tarfile.open(fileobj=io.BytesIO(members['control.tar'])) as tf:control=tf.extractfile('./control').read().decode()
-   with tarfile.open(fileobj=io.BytesIO(members['data.tar'])) as tf:
-    paths=tf.getnames();dylib=tf.extractfile(next(n for n in paths if n.endswith('.dylib'))).read()
+   with tarfile.open(fileobj=io.BytesIO(members.get('control.tar.gz', members.get('control.tar')))) as tf:control=tf.extractfile('./control').read().decode()
+   with tarfile.open(fileobj=io.BytesIO(members.get('data.tar.gz', members.get('data.tar')))) as tf:
+    paths=[e.name for e in tf.getmembers() if e.isfile()];dylib=tf.extractfile(next(n for n in paths if n.endswith('.dylib'))).read()
    arch={'rootless':'iphoneos-arm64','rootful':'iphoneos-arm','roothide':'iphoneos-arm64e'}[scheme]
    assert 'Architecture: '+arch+'\n' in control
    prefix='./var/jb/Library/' if scheme=='rootless' else './Library/'

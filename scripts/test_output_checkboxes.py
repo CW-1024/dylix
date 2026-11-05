@@ -24,9 +24,9 @@ for label,opts in cases:
   scheme=variant['scheme'];deb=(build/variant['deb']).read_bytes();at=8;members={}
   while at<len(deb):
    h=deb[at:at+60];n=int(h[48:58]);members[h[:16].decode().strip()]=deb[at+60:at+60+n];at+=60+n+(n%2)
-  with tarfile.open(fileobj=io.BytesIO(members['control.tar'])) as tf:control=tf.extractfile('./control').read().decode()
+  with tarfile.open(fileobj=io.BytesIO(members.get('control.tar.gz', members.get('control.tar')))) as tf:control=tf.extractfile('./control').read().decode()
   arch={'rootless':'iphoneos-arm64','rootful':'iphoneos-arm','roothide':'iphoneos-arm64e'}[scheme];assert 'Architecture: '+arch+'\n' in control
-  with tarfile.open(fileobj=io.BytesIO(members['data.tar'])) as tf:
+  with tarfile.open(fileobj=io.BytesIO(members.get('data.tar.gz', members.get('data.tar')))) as tf:
    names=tf.getnames();lib=tf.extractfile(next(n for n in names if n.endswith('.dylib'))).read()
   assert all(n.startswith('./var/jb/' if scheme=='rootless' else './Library/') for n in names)
   disk=(build/variant['dylib']).read_bytes() if opts.get('exportDylib',True) else lib;assert lib==disk;assert struct.unpack('<i',disk[8:12])[0]==0
