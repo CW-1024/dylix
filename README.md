@@ -12,9 +12,9 @@ iPhone / iPad 本机构建 · AI 开发助手 · 项目与 Git · 二进制工�
 
 </div>
 
-当前版本：**1.0.8（193）**，配套 **FLEX 插件 1.0.0**。本次加入人设配置、服务商扩展、通用 Agent 和 FLEX AI 联动，并完善会话持久化、模型切换、构建队列及产物同步。
+当前版本：**1.0.9（201）**，配套 **FLEX 插件 1.0.0**。本次汇总 Build193–199：上下文管理与大小设置、用量与余额统计、FLEX 连接诊断及隐根打包改进。
 
-[1.0.8 更新内容](docs/RELEASE_1.0.8.md) · [服务商与 Agent](docs/AGENT_EXTENSIONS.md) · [FLEX 联动](docs/FLEX_DYLIX_BRIDGE.md) · [连接传输](docs/CONNECTION_TRANSPORT.md)。
+[1.0.9 更新内容](docs/RELEASE_1.0.9.md) · [服务商与 Agent](docs/AGENT_EXTENSIONS.md) · [FLEX 联动](docs/FLEX_DYLIX_BRIDGE.md) · [连接传输](docs/CONNECTION_TRANSPORT.md)。
 
 ## 这是什么
 
@@ -105,7 +105,7 @@ rustup target add aarch64-apple-ios x86_64-apple-ios
 python3 scripts/build.py --sdk-root LocalSDKs/iPhoneOS26.0.sdk
 ```
 
-输出 `build/Dylix-1.0.8-build193-unsigned.ipa`。安装前使用自己的证书/适用安装方式处理主 App、Share Extension 和嵌套 framework 签名。仓库不包含个人证书、描述文件或共享 API 密钥。
+输出 `build/Dylix-1.0.9-build201-unsigned.ipa`。安装前使用自己的证书/适用安装方式处理主 App、Share Extension 和嵌套 framework 签名。仓库不包含个人证书、描述文件或共享 API 密钥。
 
 **两个 SDK 角色不同**：`--sdk-root` 决定 Dylix App 自身的构建 SDK；内嵌插件构建 SDK 可选 16.4 / 26.0，默认仍为 **SDK 16.4 + 最低 iOS 15**。
 
