@@ -9,6 +9,7 @@ NSString *TFAIValidatedReasoningEffort(NSDictionary *connection, NSString * _Nul
 NSString *TFAIReasoningRequestSummary(NSDictionary *body, NSDictionary *connection);
 NSDictionary *TFAISanitizeProbeDiagnostics(NSDictionary *diagnostics, NSString * _Nullable secret);
 NSError *TFAIError(NSInteger code, NSString *message);
+NSString * _Nullable TFAIUserAgent(NSDictionary *connection, NSError **error);
 NSURL * _Nullable TFAIEndpoint(NSDictionary *connection, BOOL models, NSError **error);
 NSDictionary * _Nullable TFAIRequestBody(NSArray *messages,NSDictionary *connection,NSArray *tools,BOOL stream,NSError **error);
 @interface TFAIStreamDecoder : NSObject

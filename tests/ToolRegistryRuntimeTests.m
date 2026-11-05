@@ -1,0 +1,37 @@
+#import <Foundation/Foundation.h>
+// This schema/permission fixture never decodes screenshots. Real UIKit image
+// handling is validated separately by the simulator, not by this stub.
+@interface UIImage : NSObject
++ (instancetype)imageWithData:(NSData *)data;
+@end
+@implementation UIImage
++ (instancetype)imageWithData:(NSData *)data{return nil;}
+@end
+#define main ExistingBudgetMain
+#import "AIRuntimeBudgetTests.m"
+#undef main
+static NSDictionary *Schema164(NSString *name,NSDictionary *properties,NSArray *required){return @{@"name":name,@"description":name,@"parameters":@{@"type":@"object",@"properties":properties,@"required":required,@"additionalProperties":@NO}};}
+static NSArray *Run164(NSString *name,NSDictionary *args,BOOL revoke,BOOL approve,BOOL revokeAtApproval){
+ requests=executions=FixtureIsolationReads=0;NSMutableArray *captured=[NSMutableArray new];FixtureTransport=^(NSArray *messages,NSArray *tools,TFAIEvent event){if(requests==1){if(revoke)FixtureContextOverrides=@{@"attachmentIDs":@[]};event(@{@"type":@"tool_call",@"id":@"registry164-call",@"name":name,@"arguments":args});event(@{@"type":@"done"});}else{event(@{@"type":@"text",@"text":@"Finished"});event(@{@"type":@"done"});}};
+ id<TFAIRuntime> runtime=TFAICreateRuntime(@"/tmp/fixture",@"fixture",nil);runtime.approval=^(NSDictionary *plan,void(^decision)(BOOL,NSArray *)){[captured addObject:@{@"type":@"fixture_approval"}];if(revokeAtApproval)[TFAIToolRegistry setEnabled:NO module:@"isolation"];decision(approve,nil);};runtime.event=^(NSDictionary *event){[captured addObject:event];};[runtime activateSession:@"fixture"];[runtime send:@[@{@"role":@"user",@"content":@"fixture",@"localAttachmentReferences":@{@"grant-1":@{@"content":@"fixture"}}}] session:@"fixture"];NSDate *deadline=[NSDate dateWithTimeIntervalSinceNow:3];while(![[captured valueForKey:@"type"] containsObject:@"done"]&&deadline.timeIntervalSinceNow>0)[NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:.01]];FixtureTransport=nil;return captured;
+}
+static NSDictionary *Result164(NSArray *events){for(NSDictionary *event in events)if([event[@"type"] isEqual:@"tool_result"])return event[@"result"];return nil;}
+int main(){@autoreleasepool{NSMutableDictionary *saved=[NSMutableDictionary new];for(NSString *module in @[@"isolation",@"memory",@"skills"]){NSString *key=[@"Dylix.Tools.v1." stringByAppendingString:module];saved[key]=[NSUserDefaults.standardUserDefaults objectForKey:key]?:NSNull.null;}@try{
+ FixtureContextOverrides=@{@"attachmentIDs":@[@"grant-1"]};NSArray *events=Run164(@"read_attachment",@{@"id":@"grant-1"},NO,YES,NO);Check(Result164(events)!=nil&&!Result164(events)[@"error"],@"actual runtime executes valid selected B read");
+ FixtureContextOverrides=@{@"attachmentIDs":@[@"grant-1"]};events=Run164(@"read_attachment",@{@"id":@"grant-1"},YES,YES,NO);Check([Result164(events)[@"error"] length]>0,@"actual runtime rejects revoked B grant after transmission");
+ FixtureContextOverrides=@{@"attachmentIDs":@[@"grant-1"]};events=Run164(@"read_attachment",@{@"id":@"not-selected"},NO,YES,NO);Check([Result164(events)[@"error"] length]>0,@"actual runtime rejects forged attachment ID");
+ [TFAIToolRegistry setEnabled:YES module:@"isolation"];FixtureIsolationSchemas=@[Schema164(@"target_app_metadata",@{@"target_id":@{@"type":@"string"}},@[@"target_id"])];FixtureContextOverrides=@{@"isolationEnabled":@YES,@"targetAppIDs":@[@"app-1"]};events=Run164(@"target_app_metadata",@{@"target_id":@"app-1"},NO,NO,NO);Check([[events valueForKey:@"type"] containsObject:@"fixture_approval"]&&FixtureIsolationReads==0,@"C asks confirmation and denial performs no read");
+ events=Run164(@"target_app_metadata",@{@"target_id":@"app-1"},NO,YES,NO);Check(FixtureIsolationReads==1&&[Result164(events)[@"readOnly"] boolValue],@"C only executes after per-call native approval");
+ events=Run164(@"target_app_metadata",@{@"target_id":@"app-1"},NO,YES,YES);Check(FixtureIsolationReads==0&&[Result164(events)[@"error"] length]>0,@"turning C off while approval is pending prevents read");
+ [TFAIToolRegistry setEnabled:YES module:@"memory"];FixtureContextOverrides=nil;events=Run164(@"agent_memory_read",@{},NO,YES,NO);Check([Result164(events)[@"content"] isEqual:@"fixture memory"],@"dedicated memory tool uses current project context");
+ [TFAIToolRegistry setEnabled:NO module:@"memory"];events=Run164(@"agent_memory_read",@{},NO,YES,NO);Check(!Result164(events)&&[[events valueForKey:@"type"] containsObject:@"error"],@"disabled memory schema never reaches executor");
+ [TFAIToolRegistry setEnabled:NO module:@"skills"];FixtureSkillMetadata=@"fixture-skill-metadata";FixtureContextOverrides=@{@"skillIDs":@[@"skill-1"]};__block NSArray *outgoing=nil;FixtureTransport=^(NSArray *messages,NSArray *tools,TFAIEvent event){outgoing=messages.copy;Check(![[tools valueForKey:@"name"] containsObject:@"agent_skill_read"],@"disabled skills not advertised");event(@{@"type":@"text",@"text":@"done"});event(@{@"type":@"done"});};id<TFAIRuntime> runtime=TFAICreateRuntime(@"/tmp/fixture",@"fixture",nil);[runtime activateSession:@"fixture"];[runtime send:@[@{@"role":@"user",@"content":@"fixture"}] session:@"fixture"];Check(![[outgoing description] containsString:@"fixture-skill-metadata"],@"disabled skills metadata absent from outgoing context");
+ FixtureTransport=nil;TFProjectAIRuntime *flexRuntime=(id)TFAICreateRuntime(@"/tmp/fixture",@"fixture",nil);[flexRuntime activateSession:@"fixture"];
+ for(NSNumber *available in @[@NO,@YES]){
+  FixtureContextOverrides=@{@"flexContextAvailable":@YES,@"flexLiveAvailable":@YES,@"flexTouchAvailable":available};
+  NSDictionary *control=nil;for(NSDictionary *schema in [flexRuntime requestSchemas])if([schema[@"name"] isEqual:@"flex_control"])control=schema;
+  Check(control!=nil&&[control[@"parameters"][@"properties"][@"operation"][@"enum"] containsObject:@"gesture"]==available.boolValue,available.boolValue?@"live touch backend advertises real gesture schema":@"older or unavailable touch backend omits gesture schema");
+ }
+ FixtureContextOverrides=@{@"flexLiveAvailable":@NO,@"flexTouchAvailable":@YES};Check(![[[flexRuntime requestSchemas] valueForKey:@"name"] containsObject:@"flex_control"],@"disconnected agent cannot advertise control even with stale touch flag");
+ NSLog(@"Tool registry runtime regression passed: 13 checks");
+ }@finally{FixtureTransport=nil;for(NSString *key in saved){if(saved[key]==NSNull.null)[NSUserDefaults.standardUserDefaults removeObjectForKey:key];else[NSUserDefaults.standardUserDefaults setObject:saved[key] forKey:key];}}}return 0;}

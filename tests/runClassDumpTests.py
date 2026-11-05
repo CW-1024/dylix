@@ -5,6 +5,7 @@ import contextlib,os
 with (contextlib.nullcontext(tempfile.mkdtemp(prefix='tf-classdump-debug-')) if os.getenv('TF_CLASSDUMP_DEBUG') else tempfile.TemporaryDirectory(prefix='tf-classdump-test-')) as temp:
     d=pathlib.Path(temp)
     subprocess.run(['xcrun','clang','-isysroot','/Library/Developer/CommandLineTools/SDKs/MacOSX15.2.sdk','-fobjc-arc','-dynamiclib','-Wl,-no_objc_category_merging','-framework','Foundation',str(root/'tests/TFClassDumpFixture.m'),'-o',str(d/'fixture.dylib')],check=True)
+    subprocess.run(['xcrun','clang','-isysroot','/Library/Developer/CommandLineTools/SDKs/MacOSX15.2.sdk','-fobjc-arc','-dynamiclib','-framework','Foundation',str(root/'tests/TFClassDumpLongNameFixture.m'),'-o',str(d/'long-name.dylib')],check=True)
     binary=(d/'fixture.dylib').read_bytes()
     with zipfile.ZipFile(d/'fixture.ipa','w') as z:
         z.writestr('Payload/Fixture.app/Fixture',binary)

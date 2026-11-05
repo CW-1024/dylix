@@ -1,3 +1,5 @@
+#import "AI/Agent/TFAIBuildCheckpoint.h"
+#import "AI/Agent/TFAIBuildQueue.h"
 #import "AI/Background/TFScreenAwake.h"
 #import "StorageSpace.h"
 #import "Remote/DXRemoteService.h"
@@ -531,7 +533,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
 }
 - (void)exportResult {
     NSMutableArray *files = [NSMutableArray array];
-    NSMutableArray *exportNames=[@[@"build.log",@"report.json",@"symbols.json",@"provenance.json",@"Tweak.mm",@"control",@"filter.plist"] mutableCopy];
+    NSMutableArray *exportNames=[@[@"build.log",@"report.json",@"symbols.json",@"provenance.json",@"checkpoint.json",@"Tweak.mm",@"control",@"filter.plist"] mutableCopy];
     for(NSString *file in [NSFileManager.defaultManager contentsOfDirectoryAtPath:self.lastBuild error:nil])if([file hasPrefix:@"logos-"]&&[@[@"m",@"mm"] containsObject:file.pathExtension])[exportNames addObject:file];
     id exportReport=[NSJSONSerialization JSONObjectWithData:[NSData dataWithContentsOfFile:[self.lastBuild stringByAppendingPathComponent:@"report.json"]]?:[NSData data] options:0 error:nil];
     if([exportReport isKindOfClass:NSDictionary.class]&&[exportReport[@"namedArtifacts"] isKindOfClass:NSArray.class])[exportNames addObjectsFromArray:exportReport[@"namedArtifacts"]];else [exportNames addObjectsFromArray:@[@"MobileTweak.deb",@"Smoke.dylib"]];
@@ -555,7 +557,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         self.console.text = @"已有构建正在执行，请等待当前任务完成。";
         return;
     }
-    TMCBuildRunning = YES;
+    self.cancelRequested=NO;TMCBuildRunning = YES;
     self.hasBuilt = YES;
     self.lastPackage = nil;
     TFScreenAwakeSet(@"build",YES);
@@ -587,6 +589,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         NSString *logPath = [build stringByAppendingPathComponent:@"build.log"];
         FILE *log = fopen(logPath.fileSystemRepresentation, "w+");
         TMCLog(log,"BUILD STARTED — %s\n",NSDate.date.description.UTF8String);
+        TMCLog(log,"CACHE POLICY — %s\n",self.checkpointCacheDirectory?"clean rebuild; current project and conversation only":"manual build checkpoint policy");
         FILE *input = fopen("/dev/null", "r");
         if(!log||!input){if(log)fclose(log);if(input)fclose(input);NSDictionary *failure=@{@"success":@NO,@"commands":@[],@"packageError":@"创建构建日志失败，请检查可用存储空间"};[[NSJSONSerialization dataWithJSONObject:failure options:0 error:nil] writeToFile:[build stringByAppendingPathComponent:@"report.json"] atomically:YES];dispatch_async(dispatch_get_main_queue(),^{self.hasBuilt=NO;TMCBuildRunning=NO;TFScreenAwakeSet(@"build",NO);self.console.text=failure[@"packageError"];if(self.buildCompletion)self.buildCompletion(NO);});return;}
         initializeEnvironment();
@@ -607,6 +610,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         }
         TMCLog(log, "commands=%s\n", commandsAsString().UTF8String); fflush(log);
         for (NSUInteger logosIndex=0;logosIndex<originalSources.count;logosIndex++) {
+            if(self.cancelRequested){TMCLog(log,"BUILD CANCELLED before Logos step\n");break;}
             NSString *original=originalSources[logosIndex];
             if (![@[@"x",@"xm"] containsObject:original.pathExtension.lowercaseString]) continue;
             source = original;
@@ -731,19 +735,25 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         [link addObjectsFromArray:@[@"-o", [build stringByAppendingPathComponent:dylibName]]];
         [commands addObject:link];
         TMCLog(log, "source count=%lu; compile all objects, then link once\n", (unsigned long)projectSources.count);
+        NSString *inputFingerprint=TFAIBuildInputFingerprint(projectDirectory,config);NSString *checkpointCache=self.checkpointCacheDirectory?:[NSSearchPathForDirectoriesInDomains(NSCachesDirectory,NSUserDomainMask,YES).firstObject stringByAppendingPathComponent:@"DylixBuildCheckpoints"];
         NSMutableArray *results = [NSMutableArray array];
         BOOL compileFailed = NO;
         for (NSArray<NSString *> *arguments in commands) {
+            if(self.cancelRequested){compileFailed=YES;TMCLog(log,"BUILD CANCELLED at command boundary\n");break;}
             if ([arguments.firstObject isEqualToString:@"ld64.lld"] && compileFailed) break;
             NSUInteger progress = results.count;
             NSString *label = progress < compileSources.count ? [NSString stringWithFormat:@"编译 %lu/%lu：%@", (unsigned long)progress + 1, (unsigned long)compileSources.count, compileSources[progress]] : @"正在链接所有对象…";
-            dispatch_async(dispatch_get_main_queue(), ^{ self.console.text = label; });
+            dispatch_async(dispatch_get_main_queue(), ^{ self.console.text = label;if(self.buildProgress)self.buildProgress(label,(double)progress/MAX(1,commands.count)); });
             NSString *command = [arguments componentsJoinedByString:@" "];
             TMCLog(log, "\n$ %s\n", command.UTF8String); fflush(log);
-            int status = runTool(arguments, input, log);
+            BOOL objectStep=progress<compileSources.count;NSString *objectPath=objectStep?objects[progress]:nil;BOOL reused=objectStep&&TFAIBuildRestoreObject(inputFingerprint,arguments,projectDirectory,build,objectPath,checkpointCache);
+            int status = reused?0:runTool(arguments, input, log);
+            if(reused)TMCLog(log,"RESUMED verified object checkpoint\n");
+            if(status==0&&objectStep&&!reused)TFAIBuildSaveObject(inputFingerprint,arguments,projectDirectory,build,objectPath,checkpointCache);
             TMCLog(log, "\nexit=%d\n", status); fflush(log);
             NSUInteger step = results.count;
-            [results addObject:@{@"command": command, @"exit": @(status), @"stage":step < compileSources.count ? @"compile" : @"link", @"source":step < compileSources.count ? compileSources[step] : @"all objects"}];
+            [results addObject:@{@"command": command, @"exit": @(status), @"reusedCheckpoint":@(reused), @"stage":step < compileSources.count ? @"compile" : @"link", @"source":step < compileSources.count ? compileSources[step] : @"all objects"}];
+            [[NSJSONSerialization dataWithJSONObject:@{@"schema":@1,@"inputFingerprint":inputFingerprint?:@"unavailable",@"completedCommands":results,@"cancelRequested":@(self.cancelRequested)} options:NSJSONWritingPrettyPrinted error:nil] writeToFile:[build stringByAppendingPathComponent:@"checkpoint.json"] atomically:YES];
             if (status != 0) {
                 compileFailed = YES;
                 if (![config[@"collectErrors"] isEqual:@YES]) break;
@@ -751,12 +761,12 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         }
         // LLVM 14 LLD accepts -arch arm64e but emits ARM64_ALL. Reject it before packaging.
         if(!compileFailed&&[cpu isEqual:@"arm64e"]){NSData *linked=[NSData dataWithContentsOfFile:[build stringByAppendingPathComponent:dylibName]];struct mach_header_64 mh={0};if(linked.length>=sizeof(mh))[linked getBytes:&mh length:sizeof(mh)];if((mh.cpusubtype&0xffffff)!=2){compileFailed=YES;TMCLog(log,"error: 当前内嵌 LLVM 14 链接器将 arm64e 输出为 arm64，已停止打包。请在项目设置选择 arm64；iphoneos-arm64e 隐根包可使用 arm64 动态库。真正 arm64e ABI 需要更新链接器。\n");[NSFileManager.defaultManager removeItemAtPath:[build stringByAppendingPathComponent:dylibName] error:nil];}}
-        BOOL toolSuccess = !compileFailed && projectSources.count > 0 && results.count == commands.count && [results.lastObject[@"exit"] intValue] == 0;
+        BOOL toolSuccess = !self.cancelRequested && !compileFailed && projectSources.count > 0 && results.count == commands.count && [results.lastObject[@"exit"] intValue] == 0;
         NSMutableDictionary *releaseIndexes=[NSMutableDictionary new];NSMutableArray *symbolProcessing=[NSMutableArray new];NSError *symbolError=nil;
         BOOL stripSymbols=TFShouldStripSymbols(config);
         if(toolSuccess&&stripSymbols){toolSuccess=TMCProcessReleaseSymbols(link,dylibName,packageScheme,build,input,log,releaseIndexes,symbolProcessing,&symbolError);if(!toolSuccess)[NSFileManager.defaultManager removeItemAtPath:[build stringByAppendingPathComponent:dylibName] error:nil];}
         NSMutableDictionary *report = [@{@"execution": @"embedded iOS frameworks", @"commands": results, @"logos":logosResults, @"sourceCount":@(projectSources.count), @"success":@NO, @"projectName":tweakName,@"packageScheme":packageScheme,@"cpuArchitecture":cpu,@"sdkVersion":sdkVersion,@"deploymentTarget":minimum} mutableCopy];
-        report[@"stripSymbols"]=@(stripSymbols);report[@"symbolProcessing"]=symbolProcessing;if(symbolError)report[@"packageError"]=symbolError.localizedDescription;
+        report[@"cachePolicy"]=self.checkpointCacheDirectory?@"clean_current_project_current_session":@"manual";report[@"stripSymbols"]=@(stripSymbols);report[@"symbolProcessing"]=symbolProcessing;if(symbolError)report[@"packageError"]=symbolError.localizedDescription;
         NSMutableArray *artifacts = [NSMutableArray arrayWithObject:dylibName];
         for (NSString *object in objects) [artifacts addObject:object.lastPathComponent];
         for (NSString *name in artifacts) {
@@ -771,6 +781,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         if(toolSuccess&&!shouldPackage){report[@"success"]=@YES;report[@"packageSkipped"]=@"Dynamic library build requested";[namedArtifacts addObject:dylibName];}
         if(toolSuccess&&shouldPackage){BOOL allPassed=YES;
           for(NSString *scheme in packageSchemes){
+            if(self.cancelRequested){allPassed=NO;break;}
             NSDictionary *context=TMCNamingContextForScheme(namingContext,scheme);
             NSError *error=nil;NSString *variantDylib=TMCVariantOutputFilename(dylibPattern,@"dylib",context,packageSchemes,scheme,&error),*variantDeb=TMCVariantOutputFilename(debPattern,@"deb",context,packageSchemes,scheme,&error);
             if(![scheme isEqual:packageScheme]){NSString *cache=[build stringByAppendingPathComponent:@".package-link-cache"];[NSFileManager.defaultManager createDirectoryAtPath:cache withIntermediateDirectories:YES attributes:nil error:nil];variantDylib=[@".package-link-cache" stringByAppendingPathComponent:[scheme stringByAppendingPathExtension:@"dylib"]];}else variantDylib=dylibName;
@@ -794,6 +805,8 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         }
         if(packages.count)report[@"package"]=packages.firstObject;report[@"packages"]=packages;report[@"variants"]=variantReports;report[@"packageSchemes"]=packageSchemes;
         report[@"outputNaming"]=@{@"debPattern":debPattern,@"dylibPattern":dylibPattern,@"context":namingContext,@"dylib":dylibName,@"deb":debName};
+        if(self.cancelRequested){report[@"success"]=@NO;report[@"packageError"]=@"构建已取消；保留检查点供重新审批后续跑。";}
+        report[@"cancelled"]=@(self.cancelRequested);report[@"checkpoint"]=@"checkpoint.json";
         report[@"provenance"]=provenance;
         report[@"runtimeVerified"]=@NO;report[@"sdkSettings"]=sdkSettings;
         NSMutableArray *symbolImages=[NSMutableArray new];
@@ -839,12 +852,13 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
 @property(nonatomic) UIWindow *window;
 @end
 @implementation AppDelegate
+- (void)openBuildQueueFromNotification:(NSNotification *)note{UIViewController *root=self.window.rootViewController;if(root.presentedViewController)return;if([root isKindOfClass:UITabBarController.class])root=[(UITabBarController *)root selectedViewController];if([root isKindOfClass:UINavigationController.class])[(UINavigationController *)root pushViewController:TFAIBuildQueueController() animated:YES];}
 - (void)openAIFromNotification:(NSNotification *)note{TMCOpenAIConversation(self.window.rootViewController,note.userInfo[@"sessionID"],note.userInfo[@"projectID"]);}
 - (BOOL)application:(UIApplication *)app openURL:(NSURL *)url options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options {if(url.isFileURL){TFIncomingReceive(self.window.rootViewController,url);return YES;}if(([url.scheme isEqual:@"tweakforge"]||[url.scheme isEqual:@"dylix"])&&[url.host isEqual:@"ai"]){TMCOpenAIConversation(self.window.rootViewController,nil,nil);return YES;}if(([url.scheme isEqual:@"tweakforge"]||[url.scheme isEqual:@"dylix"])&&[url.host isEqual:@"incoming"]){TFIncomingDrain(self.window.rootViewController);return YES;}return NO;}
 - (void)applicationDidBecomeActive:(UIApplication *)application {TFIncomingDrain(self.window.rootViewController);}
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
     [DXRemoteService shared];
-    TFAIBackgroundRegister();TFAINotificationsRegister();[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(openAIFromNotification:) name:@"TFAIOpenConversation" object:nil];
+    TFAIBackgroundRegister();TFAINotificationsRegister();[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(openBuildQueueFromNotification:) name:@"TFAIOpenBuildQueue" object:nil];[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(openAIFromNotification:) name:@"TFAIOpenConversation" object:nil];
     [NSUserDefaults.standardUserDefaults registerDefaults:@{@"StudioTheme":@1, @"StudioFont":@14, @"StudioSDKVersion":@"16.4", @"StudioDeploymentTarget":@"15.0"}];
     self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
     self.window.tintColor=[UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *trait){return trait.userInterfaceStyle==UIUserInterfaceStyleDark?[UIColor colorWithRed:.93 green:.77 blue:.52 alpha:1]:[UIColor colorWithRed:.45 green:.30 blue:.10 alpha:1];}];
@@ -855,8 +869,18 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
     BOOL testing = [NSProcessInfo.processInfo.arguments containsObject:@"--self-test"] || [NSProcessInfo.processInfo.arguments containsObject:@"--self-test-project"];
     self.window.rootViewController = testing ? [[TMCNavigationController alloc] initWithRootViewController:[CompilerController new]] : TMCStudioRoot();
 #if TARGET_OS_SIMULATOR
+#if DYLIX_HAS_INTEGRATION165
+    extern UIViewController *DXIntegration165Controller(void);
+    if([NSProcessInfo.processInfo.arguments containsObject:@"--integration165-tests"])self.window.rootViewController=[[TMCNavigationController alloc]initWithRootViewController:DXIntegration165Controller()];
+#endif
+    extern UIViewController *TFAIAgent163Regression(void);
+    extern UIViewController *TFAIToolRegistry164Regression(void);
+    if([NSProcessInfo.processInfo.arguments containsObject:@"--registry164-tests"])self.window.rootViewController=[[TMCNavigationController alloc]initWithRootViewController:TFAIToolRegistry164Regression()];
+    if([NSProcessInfo.processInfo.arguments containsObject:@"--agent163-tests"])self.window.rootViewController=[[TMCNavigationController alloc]initWithRootViewController:TFAIAgent163Regression()];
+    if([NSProcessInfo.processInfo.arguments containsObject:@"--persona-test"]){extern UIViewController *TFAIPersonaController(void);self.window.rootViewController=[[TMCNavigationController alloc]initWithRootViewController:TFAIPersonaController()];}
     if([NSProcessInfo.processInfo.arguments containsObject:@"--remote-test"])self.window.rootViewController=[[TMCNavigationController alloc]initWithRootViewController:DXRemoteSettingsController()];
     if([NSProcessInfo.processInfo.arguments containsObject:@"--remote-regression"])self.window.rootViewController=[[TMCNavigationController alloc]initWithRootViewController:DXRemoteRegressionController()];
+    if([NSProcessInfo.processInfo.arguments containsObject:@"--flex-sync-test"]){extern UIViewController *TMCFlexSessionSyncRegression(void);self.window.rootViewController=TMCFlexSessionSyncRegression();}
     extern UIViewController *TFAIShare114Regression(void);
     extern UIViewController *TFAIFile135Regression(void);
     if([NSProcessInfo.processInfo.arguments containsObject:@"--ai-files135-test"])self.window.rootViewController=[[TMCNavigationController alloc]initWithRootViewController:TFAIFile135Regression()];

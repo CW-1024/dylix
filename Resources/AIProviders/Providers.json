@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "providers": [
+    {
+      "id": "chat",
+      "name": "OpenAI Chat Completions",
+      "baseURL": "https://api.openai.com/v1",
+      "description": "OpenAI 兼容接口；适用于自定义中转服务",
+      "wireProtocol": "chat",
+      "auth": [
+        "apiKey"
+      ],
+      "capabilities": {
+        "text": "unknown",
+        "stream": "unknown",
+        "image": "unknown",
+        "tools": "unknown",
+        "thinking": "unknown"
+      },
+      "modelsURL": "https://api.openai.com/v1/models"
+    },
+    {
+      "id": "responses",
+      "name": "OpenAI Responses",
+      "baseURL": "https://api.openai.com/v1",
+      "description": "Responses 原生输入、工具与推理状态",
+      "wireProtocol": "responses",
+      "auth": [
+        "apiKey"
+      ],
+      "capabilities": {
+        "text": "unknown",
+        "stream": "unknown",
+        "image": "unknown",
+        "tools": "unknown",
+        "thinking": "unknown"
+      },
+      "modelsURL": "https://api.openai.com/v1/models"
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic Messages",
+      "baseURL": "https://api.anthropic.com/v1",
+      "description": "Messages 原生协议与工具结果",
+      "wireProtocol": "anthropic",
+      "auth": [
+        "apiKey"
+      ],
+      "capabilities": {
+        "text": "unknown",
+        "stream": "unknown",
+        "image": "unknown",
+        "tools": "unknown",
+        "thinking": "unknown"
+      },
+      "modelsURL": "https://api.anthropic.com/v1/models"
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "baseURL": "https://api.deepseek.com",
+      "description": "官方 OpenAI 兼容接口；模型能力以实际测试为准",
+      "wireProtocol": "chat",
+      "auth": [
+        "apiKey"
+      ],
+      "capabilities": {
+        "text": "unknown",
+        "stream": "unknown",
+        "image": "unknown",
+        "tools": "unknown",
+        "thinking": "unknown"
+      },
+      "modelsURL": "https://api.deepseek.com/models"
+    },
+    {
+      "id": "gemini",
+      "name": "Google Gemini",
+      "baseURL": "https://generativelanguage.googleapis.com/v1beta",
+      "description": "原生 generateContent；图片、流式、函数调用",
+      "wireProtocol": "gemini",
+      "auth": [
+        "apiKey",
+        "oauth"
+      ],
+      "capabilities": {
+        "text": "unknown",
+        "stream": "unknown",
+        "image": "unknown",
+        "tools": "unknown",
+        "thinking": "unknown"
+      },
+      "modelsURL": "https://generativelanguage.googleapis.com/v1beta/models",
+      "oauth": {
+        "kind": "google",
+        "authorizationURL": "https://accounts.google.com/o/oauth2/v2/auth",
+        "tokenURL": "https://oauth2.googleapis.com/token",
+        "revokeURL": "https://oauth2.googleapis.com/revoke",
+        "scope": "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/generative-language.retriever",
+        "documentationURL": "https://ai.google.dev/gemini-api/docs/oauth"
+      }
+    },
+    {
+      "id": "qwen",
+      "name": "通义千问 · DashScope",
+      "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "description": "OpenAI 兼容接口；不同地区需调整服务地址",
+      "wireProtocol": "chat",
+      "auth": [
+        "apiKey"
+      ],
+      "capabilities": {
+        "text": "unknown",
+        "stream": "unknown",
+        "image": "unknown",
+        "tools": "unknown",
+        "thinking": "unknown"
+      },
+      "modelsURL": "https://dashscope.aliyuncs.com/compatible-mode/v1/models"
+    },
+    {
+      "id": "siliconflow",
+      "name": "硅基流动 · SiliconFlow",
+      "baseURL": "https://api.siliconflow.cn/v1",
+      "description": "OpenAI 兼容接口；模型列表以密钥权限为准，图片与工具能力请测试确认",
+      "wireProtocol": "chat",
+      "auth": [
+        "apiKey"
+      ],
+      "capabilities": {
+        "text": "unknown",
+        "stream": "unknown",
+        "image": "unknown",
+        "tools": "unknown",
+        "thinking": "unknown"
+      },
+      "modelsURL": "https://api.siliconflow.cn/v1/models"
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "baseURL": "https://openrouter.ai/api/v1",
+      "description": "OpenAI 兼容接口；能力取决于选择的模型和路由",
+      "wireProtocol": "chat",
+      "auth": [
+        "apiKey",
+        "oauth"
+      ],
+      "capabilities": {
+        "text": "unknown",
+        "stream": "unknown",
+        "image": "unknown",
+        "tools": "unknown",
+        "thinking": "unknown"
+      },
+      "modelsURL": "https://openrouter.ai/api/v1/models",
+      "oauth": {
+        "kind": "openrouter",
+        "authorizationURL": "https://openrouter.ai/auth",
+        "tokenURL": "https://openrouter.ai/api/v1/auth/keys",
+        "documentationURL": "https://openrouter.ai/docs/guides/overview/auth/oauth"
+      }
+    },
+    {
+      "id": "kimi",
+      "name": "Kimi · Moonshot",
+      "baseURL": "https://api.moonshot.cn/v1",
+      "description": "使用官方 API 密钥；能力以当前连接实测为准",
+      "wireProtocol": "chat",
+      "auth": [
+        "apiKey"
+      ],
+      "capabilities": {
+        "text": "unknown",
+        "stream": "unknown",
+        "image": "unknown",
+        "tools": "unknown",
+        "thinking": "unknown"
+      },
+      "modelsURL": "https://api.moonshot.cn/v1/models"
+    },
+    {
+      "id": "xai",
+      "name": "xAI · Grok",
+      "baseURL": "https://api.x.ai/v1",
+      "description": "使用官方 API 密钥；能力以当前连接实测为准",
+      "wireProtocol": "chat",
+      "auth": [
+        "apiKey"
+      ],
+      "capabilities": {
+        "text": "unknown",
+        "stream": "unknown",
+        "image": "unknown",
+        "tools": "unknown",
+        "thinking": "unknown"
+      },
+      "modelsURL": "https://api.x.ai/v1/models"
+    },
+    {
+      "id": "custom",
+      "name": "自定义 OpenAI 兼容服务",
+      "baseURL": "",
+      "description": "填写你使用的 OpenAI 兼容 API 地址，可手动添加模型",
+      "wireProtocol": "chat",
+      "auth": [
+        "apiKey"
+      ],
+      "capabilities": {
+        "text": "unknown",
+        "stream": "unknown",
+        "image": "unknown",
+        "tools": "unknown",
+        "thinking": "unknown"
+      },
+      "modelsURL": ""
+    }
+  ]
+}

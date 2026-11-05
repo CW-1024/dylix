@@ -26,8 +26,10 @@ NSString *TMCOutputFilename(NSString *pattern,NSString *extension,NSDictionary<N
 
 NSDictionary *TMCEffectiveBuildOptions(NSDictionary *config,NSUserDefaults *defaults){
  NSMutableDictionary *resolved=[config mutableCopy]?:[NSMutableDictionary new];
- NSString *cxx=config[@"cxxStandard"]?:[defaults stringForKey:@"StudioCxxStandard"];NSArray *cxxStandards=@[@"c++98",@"gnu++98",@"c++11",@"gnu++11",@"c++14",@"gnu++14",@"c++17",@"gnu++17",@"c++20",@"gnu++20"];resolved[@"cxxStandard"]=[cxxStandards containsObject:cxx]?cxx:@"gnu++17";
  resolved[@"exportDylib"]=config[@"exportDylib"]?:([defaults objectForKey:@"StudioExportDylib"]?:@YES);
+ NSString *cxx=config[@"cxxStandard"]?:[defaults stringForKey:@"StudioCxxStandard"];
+ NSArray *cxxStandards=@[@"c++98",@"gnu++98",@"c++11",@"gnu++11",@"c++14",@"gnu++14",@"c++17",@"gnu++17",@"c++20",@"gnu++20"];
+ resolved[@"cxxStandard"]=[cxxStandards containsObject:cxx]?cxx:@"gnu++17";
  resolved[@"package"]=config[@"package"]?:([defaults objectForKey:@"StudioPackageEnabled"]?:@YES);
  NSArray *schemes=config[@"packageSchemes"];if(![schemes isKindOfClass:NSArray.class]){NSString *legacy=config[@"packageScheme"];schemes=legacy?@[legacy]:[defaults arrayForKey:@"StudioPackageSchemes"]?:@[@"rootless"];}
  NSMutableArray *valid=[NSMutableArray new];for(NSString *scheme in @[@"rootless",@"rootful",@"roothide"])if([schemes containsObject:scheme])[valid addObject:scheme];resolved[@"packageSchemes"]=valid;resolved[@"packageScheme"]=valid.firstObject?:@"rootless";

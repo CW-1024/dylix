@@ -88,13 +88,22 @@ static NSArray *Sorted(NSArray *items){return [items sortedArrayUsingComparator:
  NSString *path=SessionPath(projectID,session[@"id"]);if(!path||![session[@"messages"] isKindOfClass:NSArray.class]){if(error)*error=AIStoreError(@"会话标识或消息格式有误");return NO;}
  if([NSFileManager.defaultManager fileExistsAtPath:Tombstone(projectID,session[@"id"])]){if(error)*error=AIStoreError(@"会话已删除，请创建新会话；旧回调不会恢复删除记录");return NO;}
  NSMutableDictionary *safe=[session mutableCopy];NSDictionary *existing=ReadJSON(path);if([existing isKindOfClass:NSDictionary.class]&&[existing[@"metadataRevision"] unsignedLongLongValue]>[safe[@"metadataRevision"] unsignedLongLongValue]){for(NSString *key in @[@"title",@"pinned",@"projectName",@"projectRoot",@"associatedProjectID",@"metadataRevision"]){if(existing[key])safe[key]=existing[key];else[safe removeObjectForKey:key];}}
+ // Remote turns own the transcript, not the native composer's unsent user input.
+ if([safe[@"remoteRevision"] unsignedLongLongValue]>[existing[@"remoteRevision"] unsignedLongLongValue])for(NSString *key in @[@"draft",@"pendingAttachments",@"folds",@"permissionPreferences",@"scrollY",@"followBottom"]){if(existing[key])safe[key]=existing[key];}
+ // An idle native chat may still hold a snapshot from before a Remote turn.
+ // Preserve the newer remote transcript while allowing its local draft/UI preferences to save.
+ if([existing[@"remoteRevision"] unsignedLongLongValue]>[safe[@"remoteRevision"] unsignedLongLongValue]){
+  for(NSString *key in @[@"messages",@"processRecords",@"runtimeCheckpoint",@"state",@"connectionID",@"modelID",@"reasoningEffort",@"remoteRevision",@"remoteAssistantMessageID"]){if(existing[key])safe[key]=existing[key];else[safe removeObjectForKey:key];}
+ }
  safe[@"schemaVersion"]=@2;safe[@"storageProjectID"]=projectID;NSArray *previousMessages=Normalize(existing,projectID)[@"messages"]?:existing[@"messages"];BOOL changed=existing&&![ActivityMessages(previousMessages) isEqual:ActivityMessages(safe[@"messages"])];
  safe[@"updatedAt"]=changed?@(NSDate.date.timeIntervalSince1970):(existing[@"updatedAt"]?:safe[@"updatedAt"]?:safe[@"createdAt"]?:@(NSDate.date.timeIntervalSince1970));
  for(NSString *key in @[@"grants",@"approval",@"apiKey",@"secret",@"Authorization"])[safe removeObjectForKey:key];
  NSData *data=[NSJSONSerialization dataWithJSONObject:safe options:0 error:error];if(!data)return NO;if(data.length>32*1024*1024){if(error)*error=AIStoreError(@"会话已超过 32 MB，请新建会话");return NO;}
  if(!WriteJSON(safe,path,error))return NO;
  // Metadata is a rebuildable cache; payload remains authoritative if index write is interrupted.
- WriteJSON(MakeSummary(safe,projectID),SummaryPath(projectID,session[@"id"]),nil);return YES;}
+ WriteJSON(MakeSummary(safe,projectID),SummaryPath(projectID,session[@"id"]),nil);
+ if([safe[@"remoteRevision"] unsignedLongLongValue]>[existing[@"remoteRevision"] unsignedLongLongValue]){NSDictionary *change=@{@"projectID":projectID?:@"general",@"sessionID":safe[@"id"],@"remoteRevision":safe[@"remoteRevision"]};dispatch_async(dispatch_get_main_queue(),^{[NSNotificationCenter.defaultCenter postNotificationName:@"TFAISessionRemoteDidChange" object:nil userInfo:change];});}
+ return YES;}
 }
 + (void)remove:(NSString *)sessionID project:(NSString *)projectID {
  @synchronized(self){NSString *path=SessionPath(projectID,sessionID);if(!path)return;NSString *marker=Tombstone(projectID,sessionID);[NSFileManager.defaultManager createDirectoryAtPath:marker.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];[@"deleted" writeToFile:marker atomically:YES encoding:NSUTF8StringEncoding error:nil];[NSFileManager.defaultManager removeItemAtPath:path error:nil];[NSFileManager.defaultManager removeItemAtPath:SummaryPath(projectID,sessionID) error:nil];}

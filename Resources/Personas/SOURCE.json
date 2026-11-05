@@ -1,0 +1,44 @@
+{
+  "catalogVersion": 5,
+  "policy": "Public release: only MIT-licensed upstream texts with retained provenance. Private unlicensed catalog bodies are not distributed. Existing local user records are preserved by the store.",
+  "sources": [
+    {
+      "repository": "MDX-Tom/gpt-instruct",
+      "revision": "3ab84df64468bb74cc9eb4e5423660083953c44f",
+      "license": "MIT",
+      "entries": [
+        {
+          "builtinKey": "builtin.current.openai.gpt56",
+          "file": "gpt-5.6-sol-unrestricted-v45.md",
+          "bodyBytes": 5170,
+          "bodySHA256": "c71c50e2f7a303b5eebc2b24c0b1ca0d9c753e3240db05c3e472c679907898f7"
+        },
+        {
+          "builtinKey": "builtin.current.openai.astra",
+          "file": "gpt-6-astra-v2-rc1.md",
+          "bodyBytes": 7931,
+          "bodySHA256": "d6976b90b399b9e11df9430dd3663072288f1d858a4910b1e9d5109b3ae7e660"
+        },
+        {
+          "builtinKey": "builtin.current.openai",
+          "file": "gpt-6.1-sol-v1-rc2.md",
+          "bodyBytes": 7575,
+          "bodySHA256": "37382fb7082652e5b18c99fa5086fbc6d414993eaeae2ec7852ba372b031acac"
+        }
+      ]
+    },
+    {
+      "repository": "yynxxxxx/Codex-X",
+      "revision": "1a0ae707c6efde28727c0e4448d53dc262720bad",
+      "license": "MIT",
+      "entries": [
+        {
+          "builtinKey": "builtin.current.codexx.seagull3",
+          "file": "examples/海鸥3.0破甲.md",
+          "bodyBytes": 17166,
+          "bodySHA256": "0f41b90e995ec4bffea7d093b424df98ba2c1f142c9540b7a662558e8d13bafc"
+        }
+      ]
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import subprocess
 import zipfile
 import hashlib
 import gzip
+import json
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
@@ -70,13 +71,23 @@ resource_headers = ROOT / 'Resources/ClangInclude'
 shutil.copytree(resource_headers, app / 'ClangInclude', dirs_exist_ok=True)
 perl_config = (ROOT / 'Resources/Perl/Config.pm').read_text()
 assert '$^V eq 5.34.0' in perl_config and "dlsrc => 'dl_none.xs'" in perl_config, 'Expected iOS Perl 5.34.0 modules'
-resources = ['CompatibilityRules', 'ThirdPartyNotices', 'GitHelp', 'HelpArticles', 'Editor', 'GitDiff', 'RemoteWeb', 'logos', 'Include', 'Perl', 'SampleProject', 'SampleObjectiveC', 'SampleMultiProject', 'VendorFrameworks']
+resources = ['CompatibilityRules', 'ThirdPartyNotices', 'GitHelp', 'HelpArticles', 'Editor', 'GitDiff', 'RemoteWeb', 'Personas', 'AIProviders', 'AgentSkills', 'logos', 'Include', 'Perl', 'SampleProject', 'SampleObjectiveC', 'SampleMultiProject', 'FLEXProject', 'VendorFrameworks']
 if args.simulator:
     resources.append('SampleLogosGenerated')
     resources.append('SampleMultiObjectiveC')
 for resource in resources:
     shutil.copytree(ROOT / 'Resources' / resource, app / resource, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns('.git', '*.bundle', '*.dylib', '*.a', '*.o'))
+flex_source = ROOT / 'Resources/FLEXPlugin'
+flex_manifest = json.loads((flex_source / 'manifest.json').read_text(encoding='utf-8'))
+flex_dest = app / 'FLEXPlugin'
+flex_dest.mkdir(exist_ok=True)
+for entry in flex_manifest['files'].values():
+    source = flex_source / entry['name']
+    if source.name != entry['name'] or hashlib.sha256(source.read_bytes()).hexdigest() != entry['sha256']:
+        raise SystemExit('Bundled FLEX package is missing or does not match manifest: ' + str(source))
+    shutil.copy2(source, flex_dest / source.name)
+shutil.copy2(flex_source / 'manifest.json', flex_dest / 'manifest.json')
 if args.profile:
     shutil.copy2(args.profile, app / 'embedded.mobileprovision')
 # Precompressed offline editor assets reduce LAN transfer latency.
@@ -88,14 +99,14 @@ info = {
     'CFBundleExecutable': 'TheosMobileCompiler', 'CFBundleIdentifier': 'com.xuegao.theosmobilecompiler',
     'CFBundleName': 'Dylix', 'CFBundleDisplayName': 'Dylix',
     'CFBundleDevelopmentRegion': 'zh-Hans', 'CFBundleLocalizations': ['zh-Hans', 'en'],
-    'NSCameraUsageDescription': '拍摄照片作为您选择发送给模型的参考附件。', 'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': '1.0.7', 'CFBundleVersion': '160',
+    'NSCameraUsageDescription': '拍摄照片作为您选择发送给模型的参考附件。', 'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': '1.0.8', 'CFBundleVersion': '191',
     'CFBundleDocumentTypes': [{'CFBundleTypeName':'Dylix Files','CFBundleTypeRole':'Editor','LSHandlerRank':'Alternate','LSItemContentTypes':['public.data','public.archive','public.source-code']}],
     'CFBundleURLTypes': [{'CFBundleURLName':'Dylix Incoming','CFBundleURLSchemes':['dylix', 'tweakforge']}],
     'BGTaskSchedulerPermittedIdentifiers': ['com.xuegao.theosmobilecompiler.ai.processing'],
     'UIBackgroundModes': ['processing', 'audio'],
     'NSSupportsLiveActivities': True,
     'MinimumOSVersion': '15.0', 'UIDeviceFamily': [1, 2],
-    'NSAppTransportSecurity': {'NSAllowsLocalNetworking': True},
+    'NSAppTransportSecurity': {'NSAllowsArbitraryLoads': True},
     'NSLocalNetworkUsageDescription': '在你开启局域网远程工作台或配置局域网 AI 服务时，允许同一 Wi-Fi 中经你配对的设备访问。',
     'UILaunchScreen': {}, 'UIFileSharingEnabled': True, 'LSSupportsOpeningDocumentsInPlace': True,
     'UISupportedInterfaceOrientations': ['UIInterfaceOrientationPortrait', 'UIInterfaceOrientationLandscapeLeft', 'UIInterfaceOrientationLandscapeRight'],
@@ -145,11 +156,18 @@ classdumplib = ROOT / 'build' / ('classdump-' + platform) / 'libtweakforge_class
 subprocess.run(['python3', str(ROOT / 'scripts/build_classdump.py'), '--platform', platform], check=True)
 cmd = ['xcrun', '--sdk', sdk, 'clang', '-arch', arch, '-isysroot', sysroot,
        '-mios-simulator-version-min=15.0' if args.simulator else '-miphoneos-version-min=15.0',
-       '-fobjc-arc', '-fmodules', '-I' + str(ROOT / 'Vendor/libgit2/include'), '-framework', 'Network', '-framework', 'CoreImage', '-weak_framework', 'BackgroundTasks', '-framework', 'AVFoundation', '-framework', 'UserNotifications', '-framework', 'Security', '-framework', 'CoreFoundation', '-liconv', '-framework', 'UIKit', '-framework', 'CoreGraphics', '-framework', 'QuartzCore', '-framework', 'Foundation', '-framework', 'UniformTypeIdentifiers', '-framework', 'WebKit', '-framework', 'JavaScriptCore', '-larchive',
+       '-fobjc-arc', '-fmodules', '-framework', 'Network', '-framework', 'CoreImage', '-I' + str(ROOT / 'Vendor/libgit2/include'), '-weak_framework', 'BackgroundTasks', '-framework', 'AVFoundation', '-framework', 'UserNotifications', '-framework', 'AuthenticationServices', '-framework', 'Security', '-framework', 'CoreFoundation', '-liconv', '-framework', 'UIKit', '-framework', 'CoreGraphics', '-framework', 'QuartzCore', '-framework', 'Foundation', '-framework', 'UniformTypeIdentifiers', '-framework', 'WebKit', '-framework', 'JavaScriptCore', '-larchive',
        '-F' + str(frameworks), '-framework', 'ios_system',
        '-Wl,-needed_framework,libLLVM',
        '-Wl,-rpath,@executable_path/Frameworks', str(ROOT / 'App/main.m'), str(ROOT / 'App/RuntimeDiagnostics.m'), str(ROOT / 'App/ArchiveImport.m'), str(ROOT / 'App/TheosMakefile.m'), str(ROOT / 'App/DebPackage.m'), str(ROOT / 'App/OutputNaming.m'), str(ROOT / 'App/CompatibilityRepair.m'), str(ROOT / 'App/Studio.m'), str(ROOT / 'App/StorageSpace.m'), str(ROOT / 'App/ProjectSafety.m'), str(ROOT / 'App/ProjectTrash.m'), str(ROOT / 'App/GlassSupport.m'), str(ROOT / 'App/GitService.m'), str(ROOT / 'App/GitUI.m'), str(ROOT / 'App/GitHubRepositories.m'), str(ROOT / 'App/GitPATGuide.m'), str(ROOT / 'App/LinkSupport.m'), str(ROOT / 'App/HelpArticle.m'), str(ROOT / 'App/GitAutomation.m'), str(ROOT / 'App/GitDiffView.m'), str(gitlib), str(ROOT / 'Vendor/MBProgressHUD/MBProgressHUD.m'), '-o', str(app / 'TheosMobileCompiler')]
 cmd.extend(str(p) for p in sorted((ROOT / 'App/AI').rglob('*.m')))
+if args.simulator:
+    for regression in ['Integration165IOSRegression.m', 'AgentIOSRegression.m', 'ToolRegistryIOSRegression.m']:
+        source = ROOT / 'tests' / regression
+        if source.exists():
+            cmd.append(str(source))
+            if regression == 'Integration165IOSRegression.m':
+                cmd.append('-DDYLIX_HAS_INTEGRATION165=1')
 cmd.extend(str(p) for p in sorted((ROOT / 'App/Remote').glob('*.m')))
 cmd.append(str(ROOT / 'App/SDKResources.m'))
 cmd.extend(str(p) for p in sorted((ROOT / 'App/Incoming').glob('*.m')))
@@ -180,7 +198,7 @@ share.mkdir(parents=True, exist_ok=True)
 share_info = {
  'CFBundleExecutable':'TweakForgeShare','CFBundleIdentifier':'com.xuegao.theosmobilecompiler.share',
  'CFBundleName':'TweakForgeShare','CFBundleDisplayName':'Dylix','CFBundlePackageType':'XPC!',
- 'CFBundleShortVersionString':'1.0.7','CFBundleVersion':info['CFBundleVersion'],
+ 'CFBundleShortVersionString':'1.0.8','CFBundleVersion':info['CFBundleVersion'],
  'MinimumOSVersion':'15.0','UIDeviceFamily':[1,2],
  'CFBundleSupportedPlatforms':info['CFBundleSupportedPlatforms'],
  'NSExtension':{'NSExtensionPointIdentifier':'com.apple.share-services',

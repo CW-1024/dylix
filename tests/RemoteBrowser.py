@@ -46,8 +46,9 @@ with sync_playwright() as p:
  page.route('**/api/v1/status',lambda route:route.abort());page.evaluate('refresh()');expect(page.locator('#sidebar-connection')).to_have_attribute('data-state','disconnected',timeout=15000);check(page.locator('#sidebar-connection-label').inner_text()=='连接中断','sidebar reflects real failed status request');page.unroute('**/api/v1/status');page.evaluate('refresh()');expect(page.locator('#sidebar-connection-label')).to_have_text('已连接',timeout=15000);check(True,'sidebar recovers after connection resumes')
  check(page.evaluate("!document.cookie.includes('DylixRemoteSession')"),'JS cannot read session cookie')
  check(page.evaluate("""async()=>{const prior=Object.getOwnPropertyDescriptor(navigator,'clipboard');Object.defineProperty(navigator,'clipboard',{value:undefined,configurable:true});const exec=document.execCommand;let captured='';document.execCommand=command=>{captured=document.querySelector('textarea[style*=opacity]').value;return command==='copy';};try{await copyText('HTTP复制回退');return captured==='HTTP复制回退'&&!document.querySelector('textarea[style*=opacity]');}finally{document.execCommand=exec;if(prior)Object.defineProperty(navigator,'clipboard',prior);else delete navigator.clipboard;}}"""),'HTTP copy fallback works without navigator.clipboard and cleans temporary field')
+ if page.locator('html').get_attribute('data-theme')!='dark':page.locator('#theme-toggle').click();expect(page.locator('html')).to_have_attribute('data-theme','dark')
  page.screenshot(path=str(output/'overview-dark.png'),full_page=True,animations="disabled")
- page.locator('#theme-toggle').click();check(page.locator('html').get_attribute('data-theme')=='light','theme switches')
+ page.locator('#theme-toggle').click();expect(page.locator('html')).to_have_attribute('data-theme','light');check(True,'theme switches')
  page.screenshot(path=str(output/'overview-light.png'),full_page=True,animations="disabled")
  # Real simulator template from the TLS integration, exercising offline Monaco.
  pid=json.loads((container/'RemoteBrowserFixture.json').read_text())['projectID']
@@ -306,6 +307,10 @@ with sync_playwright() as p:
  from RemoteChatFixture import start,requests
  provider=start();command('fixture_model');time.sleep(.3)
  page.locator('[data-id="ai"]').click();expect(page.locator('#ai-model')).to_be_visible(timeout=15000)
+ expect(page.locator('.ai-context')).to_be_visible();page.locator('.ai-context summary').click();expect(page.locator('.ai-context-body')).to_contain_text('人设：');expect(page.locator('.ai-context-body')).to_contain_text('MCP 只读');check('未检测' in page.locator('.ai-context-body').inner_text(),'165 untested capabilities remain unknown');check('手机设置管理' in page.locator('.ai-context-body').inner_text(),'165 Remote exposes live Persona/module metadata with native management boundary')
+ metadata=page.evaluate("async()=>{const r=await run('ai_connections',{}, {quiet:true});return {safe:r.connections.every(c=>!c.baseURL&&!c.userAgent&&!c.secret&&!c.apiKey),context:r.context};}")
+ check(metadata['safe'] and set(metadata['context']['modules'])=={'skills','mcp','browser','memory','build_queue'},'165 authenticated metadata exposes five module switches without connection credentials')
+ check(metadata['context']['isolatedToolsAvailable'] is False and 'body' not in metadata['context']['persona'],'165 Remote metadata omits Persona body and excludes isolated phone tools')
  page.wait_for_function("document.querySelector('#ai-model').options.length >= 2")
  values=page.locator('#ai-model option').evaluate_all("os=>os.filter(o=>o.textContent.includes('fixture')).map(o=>o.value)")
  page.locator('#ai-model').select_option(values[-1]);page.locator('#ai-effort').select_option('high')

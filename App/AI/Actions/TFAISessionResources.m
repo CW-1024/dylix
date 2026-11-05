@@ -30,3 +30,23 @@ NSMutableArray *items=[NSMutableArray new];NSMutableSet *seen=[NSMutableSet new]
  [items sortUsingComparator:^NSComparisonResult(NSDictionary *a,NSDictionary *b){BOOL af=[a[@"folder"] boolValue],bf=[b[@"folder"] boolValue];if(af!=bf)return af?NSOrderedAscending:NSOrderedDescending;NSComparisonResult date=[(b[@"modified"]?:@0) compare:(a[@"modified"]?:@0)];return date!=NSOrderedSame?date:[a[@"name"] localizedStandardCompare:b[@"name"]];}];
  return items;
 }
+
+// Project Remote runtime events into the same durable records the native chat indexes.
+BOOL TFAIRecordSessionToolEvent(NSMutableDictionary *session,NSDictionary *event){
+ NSString *type=SFText(event[@"type"]),*identifier=SFText(event[@"id"]);
+ if([type isEqual:@"assistant_start"]){session[@"remoteAssistantMessageID"]=SFText(event[@"messageID"]);return NO;}
+ if(![@[@"tool_call",@"tool_started",@"tool_progress",@"tool_result"] containsObject:type]||!identifier.length)return NO;
+ NSMutableArray *records=[session[@"processRecords"] mutableCopy]?:[NSMutableArray new];NSUInteger index=[records indexOfObjectPassingTest:^BOOL(NSDictionary *r,NSUInteger i,BOOL *stop){return [r[@"id"] isEqual:identifier];}];
+ NSMutableDictionary *record=index==NSNotFound?[NSMutableDictionary new]:[records[index] mutableCopy];record[@"id"]=identifier;
+ if(event[@"name"])record[@"name"]=event[@"name"];if(event[@"arguments"])record[@"arguments"]=event[@"arguments"];
+ if(!record[@"assistantMessageID"]&&[session[@"remoteAssistantMessageID"] length])record[@"assistantMessageID"]=session[@"remoteAssistantMessageID"];
+ if([type isEqual:@"tool_call"])record[@"status"]=@"requested";
+ if([type isEqual:@"tool_started"]){record[@"status"]=@"running";record[@"startedAt"]=@(NSDate.date.timeIntervalSince1970);}
+ if([type isEqual:@"tool_progress"])record[@"summary"]=[NSString stringWithFormat:@"%.0f%% · %@",[event[@"progress"] doubleValue]*100,event[@"message"]?:@""];
+ if([type isEqual:@"tool_result"]){NSDictionary *result=[event[@"result"] isKindOfClass:NSDictionary.class]?event[@"result"]:@{};record[@"result"]=result;
+  BOOL failed=result[@"error"]||([record[@"name"] isEqual:@"build_project"]&&result[@"success"]&&![result[@"success"] boolValue]);record[@"status"]=failed?@"failed":@"completed";
+  if([@[@"interrupted",@"cancelled",@"stopped"] containsObject:result[@"state"]]||[result[@"interrupted"] boolValue])record[@"status"]=@"interrupted";
+  record[@"finishedAt"]=@(NSDate.date.timeIntervalSince1970);if(record[@"startedAt"])record[@"duration"]=@(MAX(0,[record[@"finishedAt"] doubleValue]-[record[@"startedAt"] doubleValue]));[record removeObjectForKey:@"summary"];
+ }
+ if(index==NSNotFound)[records addObject:record];else records[index]=record;session[@"processRecords"]=records;return YES;
+}

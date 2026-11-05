@@ -58,3 +58,9 @@ python3 scripts/test_package_schemes.py
 ## 发布材料
 
 源码包含两套 SDK 构建输入；公开工具链资产另行下载。发布内容不含个人证书、用户数据或旧构建。GPL 原创代码、Logos 等对应源码与构建脚本均随仓库提供；第三方许可见仓库及 App 内说明。Apple SDK 与系统库仍受其各自条款约束。
+
+## 1.0.8 内置 FLEX 插件
+
+Resources/FLEXPlugin/manifest.json 声明随 App 打包的 FLEX 1.0.0 dylib / deb 与 SHA-256，构建脚本校验后复制。对应插件源码见同版 Release 的 FLEX-1.0.0-source.zip；在 macOS 安装 Theos 后执行 `LC_ALL=C LC_CTYPE=C LANG=C THEOS=/path/to/theos make package FINALPACKAGE=1`。仅插件版本重编号，连接配置格式保持原样。
+
+公开 Persona 目录只包含有 MIT 许可的四项数据。私有无许可正文不发布；用户已有本地配置不清空。

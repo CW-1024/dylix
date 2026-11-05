@@ -3,7 +3,7 @@
 import hashlib,io,json,os,plistlib,re,shutil,struct,subprocess,tarfile,time
 from pathlib import Path
 from test_local_projects import copy_sources
-R=Path(__file__).resolve().parents[1];SOURCE=Path(os.environ.get('DYLIX_TEST_PROJECTS',str(R/'fixtures/optional-local-projects')));OUT=R/'evidence/0.5.2-rainbow-projects';OUT.mkdir(exist_ok=True);B='com.xuegao.theosmobilecompiler'
+R=Path(__file__).resolve().parents[1];SOURCE=Path('/Users/xuegao/彩虹编译');OUT=R/'evidence/0.5.2-rainbow-projects';OUT.mkdir(exist_ok=True);B='com.xuegao.theosmobilecompiler'
 CASES=[('kook','kook'),('AutoMessagePlugin','AutoMessagePlugin'),('AutoMessagePlugin2','AutoMessagePlugin 2'),('WCElite','微信优化 2/wcyh/wcyh'),('RainbowHelper','Rainbow/RainbowHelper/RainbowHelper'),('xncj','虚拟插件/xncj/xncj'),('xiangqing','xiangqing/xiangqing'),('FLEX','FLEX')]
 def run(args,**kwargs):return subprocess.run(list(map(str,args)),capture_output=True,text=True,**kwargs)
 def sim(*args):

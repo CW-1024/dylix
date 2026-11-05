@@ -3,6 +3,7 @@
 #import "DXRemoteHTTP.h"
 #import "DXRemoteAccess.h"
 #import "DXRemoteWorkspace.h"
+#import "DXFlexBridge.h"
 #import "DXRemoteWebDAV.h"
 #import "DXRemoteTLS.h"
 #import "../AI/AIV2Contracts.h"
@@ -14,6 +15,9 @@
 #import <net/if.h>
 extern BOOL TMCBuildIsRunning(void);
 static NSString *WiFiAddress(void){
+#if TARGET_OS_SIMULATOR
+ if([NSProcessInfo.processInfo.arguments containsObject:@"--remote-regression"])return @"127.0.0.1";
+#endif
  struct ifaddrs *interfaces=NULL;if(getifaddrs(&interfaces))return nil;NSString *result=nil;
  for(struct ifaddrs *p=interfaces;p;p=p->ifa_next)if(p->ifa_addr&&p->ifa_addr->sa_family==AF_INET&&(p->ifa_flags&IFF_UP)&&strcmp(p->ifa_name,"en0")==0){
   struct sockaddr_in *address=(void *)p->ifa_addr;uint32_t v=ntohl(address->sin_addr.s_addr);
@@ -203,6 +207,18 @@ static NSDictionary *Error(NSInteger status,NSString *code,NSString *message){re
  }
  NSDictionary *device=[self.access authenticateCookie:headers[@"cookie"]?:@"" name:self.cookieName];if([device[@"permission"] isEqual:@"webdav"])device=nil;if(!device)return Error(401,@"authentication_required",@"请先在手机上配对此浏览器");
  if(![@[@"GET",@"HEAD"] containsObject:method]&&(![headers[@"origin"] isEqual:self.server.origin]||![headers[@"x-dylix-csrf"] isEqual:device[@"csrf"]]))return Error(403,@"csrf_rejected",@"请求确认信息已过期，请刷新");
+ if([path isEqual:@"/api/v1/flex/next"]&&[method isEqual:@"GET"]){
+  if(![device[@"permission"] isEqual:@"workspace"])return Error(403,@"workspace_required",@"FLEX 实时连接需要工作区授权");
+  if(![self.snapshot[@"protectedDataAvailable"] boolValue])return Error(423,@"device_locked",@"设备已锁定");
+  return DXRemoteResponse(200,@{@"schema":@1,@"data":[DXFlexBridge.shared nextForDevice:device[@"id"]]});
+ }
+ if([path isEqual:@"/api/v1/flex/reply"]&&[method isEqual:@"POST"]){
+  if(![device[@"permission"] isEqual:@"workspace"])return Error(403,@"workspace_required",@"FLEX 实时连接需要工作区授权");
+  if(![[headers[@"content-type"] lowercaseString] hasPrefix:@"application/json"])return Error(415,@"json_required",@"请发送 JSON");
+  id body=[NSJSONSerialization JSONObjectWithData:request[@"body"] options:0 error:nil];NSError *failure=nil;
+  if(![body isKindOfClass:NSDictionary.class]||![DXFlexBridge.shared reply:body device:device[@"id"] error:&failure])return Error(400,@"invalid_flex_reply",failure.localizedDescription?:@"FLEX 返回无效");
+  return DXRemoteResponse(200,@{@"schema":@1,@"data":@{@"accepted":@YES}});
+ }
  if([path hasPrefix:@"/api/v1/download/"]&&[@[@"GET",@"HEAD"] containsObject:method]){if(![device[@"permission"] isEqual:@"workspace"])return Error(403,@"workspace_required",@"请在手机重新配对并确认工作区权限");return [self.workspace download:[path substringFromIndex:17] device:device[@"id"]];}
  if([@[@"/api/v1/workspace",@"/api/v1/jobs/get",@"/api/v1/jobs/confirm",@"/api/v1/jobs/cancel"] containsObject:path]&&[method isEqual:@"POST"]){
   if(![device[@"permission"] isEqual:@"workspace"])return Error(403,@"workspace_required",@"当前仅有查看概况权限，请重新配对并在手机授权工作区");

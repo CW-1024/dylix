@@ -2,7 +2,7 @@
 """Run Git workflows on a local Theos project copy; audit original read-only."""
 import pathlib,tempfile,subprocess,json,hashlib,os
 from test_local_projects import copy_sources
-root=pathlib.Path(__file__).resolve().parents[1];original=pathlib.Path(os.environ.get('DYLIX_TEST_PROJECT',str(root/'fixtures/optional-local-project')));exe='/private/tmp/tf-git-fixture';out=root/'evidence/0.6.0-git';out.mkdir(parents=True,exist_ok=True)
+root=pathlib.Path(__file__).resolve().parents[1];original=pathlib.Path('/Users/xuegao/彩虹编译/dyyy/AutoMessagePlugin/AutoMessagePlugin');exe='/private/tmp/tf-git-fixture';out=root/'evidence/0.6.0-git';out.mkdir(parents=True,exist_ok=True)
 def manifest():
  return {str(p.relative_to(original)):{'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'mtime_ns':p.stat().st_mtime_ns} for p in original.rglob('*') if p.is_file() and not p.is_symlink()}
 def op(action,dest,**kw):

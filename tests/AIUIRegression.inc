@@ -28,14 +28,14 @@ static NSDictionary *TFAICheckUIRegression(UIViewController *chat,TFAIUIFixtureR
  check([[chat valueForKey:@"attachments"] count]==1,@"selected code staged not sent");
  check([[chat valueForKey:@"messages"] count]==0,@"opening never sends context");
  UITableView *table=[chat valueForKey:@"table"];UITextView *input=[chat valueForKey:@"input"];
- check(table.bounds.size.width>0&&input.bounds.size.height==76,@"phone layout has stable composer");
+ UIView *composer=[chat valueForKey:@"composer"];check(table.bounds.size.width>0&&fabs(input.bounds.size.height-48)<.5&&input.bounds.size.height<=composer.bounds.size.height&&CGRectGetMaxY(table.frame)<=CGRectGetMinY(composer.frame)+.5,@"phone layout has stable composer");
  runtime.event(@{@"type":@"assistant_start"});runtime.event(@{@"type":@"text",@"text":@"First "});runtime.event(@{@"type":@"text",@"text":@"response"});
  check([[[chat valueForKey:@"messages"] lastObject][@"content"] isEqual:@"First response"],@"stream fragments append once");
  runtime.event(@{@"type":@"tool_result",@"id":@"fixture",@"name":@"read_file",@"result":@{@"content":@"int value = 1;"}});
  runtime.event(@{@"type":@"assistant_start"});runtime.event(@{@"type":@"text",@"text":@"After tool"});
  check([[chat valueForKey:@"messages"] count]==3,@"tool rounds use separate bubbles");
  NSArray *normalized=@[@{@"role":@"user",@"content":@"test"},@{@"role":@"assistant",@"content":@"done"}];runtime.event(@{@"type":@"done",@"state":@"completed",@"messages":normalized});
- check([[chat valueForKey:@"messages"] isEqual:normalized],@"normalized transcript retained");
+ NSArray *stored=[chat valueForKey:@"messages"];NSMutableArray *payload=[NSMutableArray new];NSMutableSet *identifiers=[NSMutableSet new];for(NSDictionary *m in stored){[payload addObject:@{@"role":m[@"role"]?:@"",@"content":m[@"content"]?:@""}];if([m[@"messageID"] length])[identifiers addObject:m[@"messageID"]];}check([payload isEqual:normalized]&&identifiers.count==normalized.count,@"normalized transcript retained with unique persistent message identities");
  check(![[chat valueForKey:@"running"] boolValue],@"done clears active state");
  [chat rebuildDisplay];NSArray *rows=[chat valueForKey:@"displayed"];NSUInteger messageCount=0;for(NSDictionary *row in rows)if([@[@"user",@"assistant"] containsObject:row[@"role"]])messageCount++;check(messageCount==2&&[table numberOfRowsInSection:0]==rows.count&&[[chat valueForKey:@"processRecords"] count]==1,@"table retains messages and separate tool process");
  id cell=[table.dataSource tableView:table cellForRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:0]];check([cell isKindOfClass:UITableViewCell.class],@"virtualized native message cell");

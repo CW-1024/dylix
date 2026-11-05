@@ -39,3 +39,5 @@ UIViewController *TFAIAttachments108Regression(void);
 void TMCOpenAIConversation(UIViewController *root,NSString *sessionID,NSString *projectID);
 
 UIViewController *TMCStudioSDKRegression(void);
+
+BOOL TMCStudioResumeBuild(NSString *root,UINavigationController *navigation);

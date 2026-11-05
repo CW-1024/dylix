@@ -1,0 +1,24 @@
+// Integration coverage uses the same NSURLProtocol fixture as provider_v4Tests.
+static void Provider165Tests(void){
+ NSError *error=nil;
+ Check([TFAIUserAgent(@{},&error) isEqual:@""],@"165 absent UA keeps system default");
+ Check([TFAIUserAgent(@{@"userAgent":@" Client/1.0 "},&error) isEqual:@"Client/1.0"],@"165 custom UA normalized");
+ for(id value in @[@"a\r\nX-Injected: yes",@"含中文",@12,[@"x" stringByPaddingToLength:513 withString:@"x" startingAtIndex:0]])Check(!TFAIUserAgent(@{@"userAgent":value},&error),@"165 invalid UA rejected before requests");
+ NSMutableDictionary *c=[Conn(@"chat") mutableCopy];c[@"baseURL"]=@"http://provider-v4.example.invalid/v1";
+ Check(!TFAIEndpoint(c,NO,&error),@"165 HTTP requires explicit opt-in");c[@"allowHTTP"]=@YES;
+ Check([TFAIEndpoint(c,NO,&error).scheme isEqual:@"http"],@"165 opted-in HTTP host accepted");
+ c[@"authMethod"]=@"oauth";Check(!TFAIEndpoint(c,NO,&error),@"165 OAuth stays HTTPS only");[c removeObjectForKey:@"authMethod"];
+ c[@"userAgent"]=@"DylixFixture/165";NSUInteger before=Requests.count;NSDictionary *probe=Probe(c,@"text",&error);
+ Check(!error&&probe&&Requests.count==before+1&&[[(NSURLRequest *)Requests.lastObject valueForHTTPHeaderField:@"User-Agent"] isEqual:c[@"userAgent"]],@"165 real transport sends custom UA on opted-in HTTP");
+ c[@"allowHTTP"]=@NO;before=Requests.count;Probe(c,@"text",&error);Check(error&&Requests.count==before,@"165 revoke HTTP blocks before network");
+ c=[Conn(@"gemini") mutableCopy];c[@"userAgent"]=@"DylixFixture/165";
+ __block BOOL done=NO;__block NSError *failure=nil;TFAITransport *transport=[TFAITransport new];[transport discover:c completion:^(NSDictionary *r,NSError *e){failure=e;done=YES;}];NSDate *limit=[NSDate dateWithTimeIntervalSinceNow:5];while(!done&&limit.timeIntervalSinceNow>0)[NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:.01]];
+ Check(done&&!failure&&[[(NSURLRequest *)Requests.lastObject valueForHTTPHeaderField:@"User-Agent"] isEqual:c[@"userAgent"]],@"165 discovery pagination preserves custom UA");
+ c=[Conn(@"chat") mutableCopy];c[@"userAgent"]=@"DylixFixture/165";transport=[TFAITransport new];[transport setValue:c forKey:@"connection"];
+ NSArray *pairs=@[@[@"http://fixture.invalid/a",@"http://fixture.invalid:80/b",@YES],@[@"http://fixture.invalid/a",@"http://fixture.invalid:443/b",@NO],@[@"https://fixture.invalid/a",@"https://fixture.invalid:443/b",@YES],@[@"https://fixture.invalid/a",@"http://fixture.invalid/a",@NO],@[@"http://fixture.invalid:8080/a",@"http://fixture.invalid:8081/b",@NO]];
+ NSURLSession *session=[NSURLSession sessionWithConfiguration:NSURLSessionConfiguration.ephemeralSessionConfiguration];
+ for(NSArray *pair in pairs){NSMutableURLRequest *from=[NSMutableURLRequest requestWithURL:[NSURL URLWithString:pair[0]]];from.HTTPMethod=@"POST";NSURLSessionDataTask *task=[session dataTaskWithRequest:from];NSMutableURLRequest *to=[NSMutableURLRequest requestWithURL:[NSURL URLWithString:pair[1]]];to.HTTPMethod=@"POST";__block NSURLRequest *accepted=nil;[(id<NSURLSessionTaskDelegate>)transport URLSession:session task:task willPerformHTTPRedirection:nil newRequest:to completionHandler:^(NSURLRequest *r){accepted=r;}];Check((accepted!=nil)==[pair[2] boolValue],@"165 redirect scheme and effective port checked");if(accepted)Check([[accepted valueForHTTPHeaderField:@"User-Agent"] isEqual:@"DylixFixture/165"],@"165 redirect preserves custom UA");[task cancel];}[session invalidateAndCancel];
+ NSUserDefaults *defaults=NSUserDefaults.standardUserDefaults;id old=[defaults objectForKey:@"TFAI.Connections.v1"],oldDefault=[defaults objectForKey:@"TFAI.DefaultConnection.v1"];
+ @try{c=[Conn(@"chat") mutableCopy];c[@"id"]=@"transport165-fixture";c[@"userAgent"]=@"DylixFixture/165";c[@"capabilities"]=@{@"text":@"supported"};Check([TFAIConnections save:c secret:nil error:&error],@"165 saves UA connection");NSDictionary *(^saved)(void)=^{for(NSDictionary *row in TFAIConnections.all)if([row[@"id"] isEqual:@"transport165-fixture"])return row;return @{};};Check([saved()[@"userAgent"] isEqual:c[@"userAgent"]],@"165 UA persists in connection");c=[saved() mutableCopy];c[@"userAgent"]=@"Changed/165";[TFAIConnections save:c secret:nil error:&error];Check(!saved()[@"capabilities"],@"165 UA change invalidates measured capabilities");c=[saved() mutableCopy];c[@"baseURL"]=@"http://provider-v4.example.invalid/v1";c[@"allowHTTP"]=@NO;Check([TFAIConnections save:c secret:nil error:&error]&&!TFAIEndpoint(saved(),NO,nil),@"165 disabled HTTP config can persist without allowing requests");}
+ @finally{if(old)[defaults setObject:old forKey:@"TFAI.Connections.v1"];else[defaults removeObjectForKey:@"TFAI.Connections.v1"];if(oldDefault)[defaults setObject:oldDefault forKey:@"TFAI.DefaultConnection.v1"];else[defaults removeObjectForKey:@"TFAI.DefaultConnection.v1"];}
+}

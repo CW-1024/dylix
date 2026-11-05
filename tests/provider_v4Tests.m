@@ -24,7 +24,7 @@ static NSMutableArray *Requests;
 @end
 static NSDictionary *Probe(NSDictionary *connection,NSString *capability,NSError **outError){__block BOOL done=NO;__block NSDictionary *result=nil;__block NSError *error=nil;TFAITransport *transport=[TFAITransport new];[transport probe:connection capability:capability completion:^(NSDictionary *value,NSError *failure){result=value;error=failure;done=YES;}];NSDate *limit=[NSDate dateWithTimeIntervalSinceNow:5];while(!done&&limit.timeIntervalSinceNow>0)[NSRunLoop.currentRunLoop runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:.02]];if(outError)*outError=error;Check(done,@"probe finishes without an external network request");return result;}
 int main(int argc,char **argv){@autoreleasepool{Requests=[NSMutableArray new];NSError *error=nil;
- Check(TFAIProtocolCatalog().count==8,@"eight protocol/service choices including SiliconFlow");
+ Check(TFAIProtocolCatalog().count==11,@"original eight service choices plus Kimi, xAI and custom");
  NSDictionary *sf=@{@"protocol":@"siliconflow",@"baseURL":@"https://api.siliconflow.cn/v1",@"model":@"deepseek-ai/DeepSeek-V3"};
  Check([TFAIEndpoint(sf,YES,&error).absoluteString isEqual:@"https://api.siliconflow.cn/v1/models"],@"SiliconFlow model endpoint");
  Check([TFAIEndpoint(sf,NO,&error).absoluteString isEqual:@"https://api.siliconflow.cn/v1/chat/completions"],@"SiliconFlow chat endpoint");

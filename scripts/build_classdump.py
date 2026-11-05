@@ -4,6 +4,8 @@ import argparse, os, pathlib, shutil, subprocess
 root=pathlib.Path(__file__).resolve().parents[1]
 p=argparse.ArgumentParser();p.add_argument('--platform',choices=['device','simulator','macos'],default='device');a=p.parse_args()
 env=os.environ.copy()
+if pathlib.Path('/private/tmp/tf77-cargo/bin/cargo').exists():
+    env.setdefault('CARGO_HOME','/private/tmp/tf77-cargo');env.setdefault('RUSTUP_HOME','/private/tmp/tf77-rustup')
 cargo=shutil.which('cargo') or str(pathlib.Path(env.get('CARGO_HOME','~/.cargo')).expanduser()/'bin/cargo')
 target={'device':'aarch64-apple-ios','simulator':'x86_64-apple-ios','macos':'aarch64-apple-darwin'}[a.platform]
 out=root/'build'/('classdump-'+a.platform);out.mkdir(parents=True,exist_ok=True)
@@ -12,6 +14,6 @@ rust_inputs=[path for path in (root/'Vendor/REipa').rglob('*') if path.is_file()
 if output.exists() and rust_inputs and output.stat().st_mtime>=max(path.stat().st_mtime for path in rust_inputs):
  print(output);raise SystemExit(0)
 env['PATH']=str(pathlib.Path(cargo).parent)+os.pathsep+env.get('PATH','');env['IPHONEOS_DEPLOYMENT_TARGET']='15.0'
-subprocess.run([cargo,'+stable','build','--manifest-path',str(root/'Vendor/REipa/Cargo.toml'),'--package','tweakforge-classdump','--locked','--release','--target',target],env=env,check=True)
+subprocess.run([cargo,'+stable','build','--manifest-path',str(root/'Vendor/REipa/Cargo.toml'),'--package','tweakforge-classdump','--release','--target',target],env=env,check=True)
 shutil.copy2(root/'Vendor/REipa/target'/target/'release/libtweakforge_classdump.a',out/'libtweakforge_classdump.a')
 print(out/'libtweakforge_classdump.a')

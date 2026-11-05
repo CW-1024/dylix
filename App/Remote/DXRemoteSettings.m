@@ -1,4 +1,5 @@
 #import "DXRemoteService.h"
+#import "DXFlexPluginInfo.h"
 #import "../AI/AIV2Contracts.h"
 #import "../GlassSupport.h"
 #import <CoreImage/CoreImage.h>
@@ -33,9 +34,9 @@
  if(changed&&!self.tableView.dragging&&!self.tableView.decelerating&&!self.presentedViewController)[self.tableView reloadData];
  UITableViewCell *cell=[self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:2 inSection:1]];cell.detailTextLabel.text=[self codeDetail];
 }
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)table{return 6;}
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)table{return 7;}
 - (NSInteger)tableView:(UITableView *)table numberOfRowsInSection:(NSInteger)section{return section==0?5:section==1?4:section==2?1:section==3?MAX(1,[self.snapshot[@"devices"] count]):section==4?5:1;}
-- (NSString *)tableView:(UITableView *)table titleForHeaderInSection:(NSInteger)section{return @[@"Dylix Remote",@"访问与配对",@"后台状态",@"已授权设备",@"访问范围",@"服务记录"][section];}
+- (NSString *)tableView:(UITableView *)table titleForHeaderInSection:(NSInteger)section{return @[@"Dylix Remote",@"访问与配对",@"后台状态",@"已授权设备",@"访问范围",@"服务记录",@"FLEX 联动"][section];}
 - (NSString *)tableView:(UITableView *)table titleForFooterInSection:(NSInteger)section{
  if(section==0)return self.snapshot[@"error"]&&[self.snapshot[@"error"] length]?self.snapshot[@"error"]:@"服务开启且 App 在前台时保持屏幕常亮，关闭后恢复自动锁屏。服务默认关闭，HTTP 为局域网明文传输。";
  if(section==1)return @"输入正确授权码即可连接，无需手机再次确认。随机码一次有效且 5 分钟到期；固定码存于本机钥匙串，手动更换前有效。请只向可信设备提供授权码。";
@@ -73,6 +74,7 @@
  }
 
  if(index.section==5){c.textLabel.text=@"服务日志";c.detailTextLabel.text=[NSString stringWithFormat:@"%lu 条本次进程事件",(unsigned long)[self.snapshot[@"logs"] count]];c.accessoryType=UITableViewCellAccessoryDisclosureIndicator;c.imageView.image=[UIImage systemImageNamed:@"list.bullet.rectangle"];}
+ if(index.section==6){c.textLabel.text=@"FLEX 插件";c.detailTextLabel.text=@"功能说明 · 内置 deb 与 dylib";c.accessoryType=UITableViewCellAccessoryDisclosureIndicator;c.imageView.image=[UIImage systemImageNamed:@"puzzlepiece.extension"];}
  return c;
 }
 - (void)toggleDAV:(UISwitch *)sender{if(!sender.on){[DXRemoteService.shared stopWebDAV];return;}[self chooseDAV];}
@@ -86,6 +88,7 @@
 - (void)message:(NSString *)title text:(NSString *)text{UIAlertController *a=[UIAlertController alertControllerWithTitle:title message:text preferredStyle:UIAlertControllerStyleAlert];[a addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleCancel handler:nil]];[self presentViewController:a animated:YES completion:nil];}
 - (void)tableView:(UITableView *)table didSelectRowAtIndexPath:(NSIndexPath *)index{
  [table deselectRowAtIndexPath:index animated:YES];
+ if(index.section==6){[self.navigationController pushViewController:DXFlexPluginInfoController() animated:YES];return;}
  if(index.section==0&&index.row==3){
   UIAlertController *a=[UIAlertController alertControllerWithTitle:@"HTTP 端口" message:@"关闭服务后设置，范围 1024–65535" preferredStyle:UIAlertControllerStyleAlert];[a addTextFieldWithConfigurationHandler:^(UITextField *f){f.keyboardType=UIKeyboardTypeNumberPad;f.text=[self.snapshot[@"port"] stringValue];}];[a addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(id action){NSString *s=a.textFields.firstObject.text;if(s.length&&[s rangeOfCharacterFromSet:NSCharacterSet.decimalDigitCharacterSet.invertedSet].location==NSNotFound&&s.integerValue>=1024&&s.integerValue<=65535)[DXRemoteService.shared setPort:s.integerValue];else[self message:@"端口有误" text:@"请输入 1024–65535"]; }]];[a addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];[self presentViewController:a animated:YES completion:nil];return;
  }

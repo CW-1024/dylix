@@ -17,6 +17,10 @@
 @property(nonatomic) NSString *lastPackage;
 @property(nonatomic) NSString *lastBuild;
 @property(nonatomic) BOOL hasBuilt;
+@property(atomic) BOOL cancelRequested;
+@property(nonatomic,copy) void (^buildProgress)(NSString *,double);
+// nil keeps manual-build checkpoint behavior; AI sets a session-only namespace.
+@property(nonatomic,copy) NSString *checkpointCacheDirectory;
 @property(nonatomic) NSString *pendingImportedProject;
 @property(nonatomic,copy) void (^importCompletion)(NSString *path);
 @property(nonatomic,copy) void (^buildCompletion)(BOOL success);

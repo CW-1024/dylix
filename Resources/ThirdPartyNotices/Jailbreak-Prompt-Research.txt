@@ -1,0 +1,3 @@
+Public release persona catalog
+
+This release distributes four MIT-licensed data entries from MDX-Tom/gpt-instruct and yynxxxxx/Codex-X. Revisions, files and hashes are recorded in Resources/Personas/SOURCE.json. MIT notices are included in GPT-Instruct-LICENSE.txt and Codex-X-LICENSE.txt. Unlicensed private-use prompt bodies are not distributed. Persona storage, editor, modes and matching are independent Objective-C implementations.

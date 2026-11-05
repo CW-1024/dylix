@@ -125,5 +125,18 @@
     "license": "MIT",
     "source": "https://github.com/microsoft/monaco-editor",
     "file": "monaco-editor-MIT.txt"
+  },
+  {
+    "name": "模型匹配提示词目录",
+    "license": "togg: operator-confirmed private use; GPT-Instruct: MIT",
+    "source": "https://github.com/togg53192-cmd/jailbreaks",
+    "file": "Jailbreak-Prompt-Research.txt"
+  },
+  {
+    "name": "GPT-Instruct prompts",
+    "version": "3ab84df64468bb74cc9eb4e5423660083953c44f",
+    "license": "MIT",
+    "source": "https://github.com/MDX-Tom/gpt-instruct",
+    "file": "GPT-Instruct-LICENSE.txt"
   }
 ]

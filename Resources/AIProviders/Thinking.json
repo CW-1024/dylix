@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "labels": {
+    "minimal": "最少",
+    "low": "轻",
+    "medium": "中",
+    "high": "高",
+    "xhigh": "极高",
+    "ultra": "Ultra",
+    "max": "最高",
+    "enabled": "开启思考"
+  },
+  "rules": [
+    {
+      "modelPattern": "^gemini-2\\.5",
+      "levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "protocols": [
+        "gemini"
+      ]
+    },
+    {
+      "modelPattern": "^gemini-3-pro",
+      "levels": [
+        "low",
+        "high"
+      ],
+      "protocols": [
+        "gemini"
+      ]
+    },
+    {
+      "modelPattern": "^gemini-3-flash",
+      "levels": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "protocols": [
+        "gemini"
+      ]
+    },
+    {
+      "modelPattern": ".*",
+      "levels": [],
+      "protocols": [
+        "gemini"
+      ]
+    },
+    {
+      "modelPattern": "^(deepseek-v4|deepseek-pro$|deepseek-flash$)",
+      "levels": [
+        "low",
+        "high",
+        "max"
+      ]
+    },
+    {
+      "modelPattern": "^deepseek-v3\\.[12]",
+      "levels": [
+        "enabled"
+      ]
+    },
+    {
+      "modelPattern": "^deepseek-chat$",
+      "levels": [
+        "enabled"
+      ],
+      "protocols": [
+        "deepseek"
+      ]
+    },
+    {
+      "modelPattern": "^(qwen3|qwen-plus|qwen-turbo)",
+      "levels": [
+        "enabled"
+      ],
+      "excludePattern": "instruct"
+    },
+    {
+      "modelPattern": "^(gpt-6.*-(sol|astra)|gpt-5\\.6.*-(sol|terra))",
+      "levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "ultra"
+      ],
+      "protocols": [
+        "chat",
+        "responses",
+        "openrouter",
+        "custom",
+        "kimi",
+        "xai"
+      ]
+    },
+    {
+      "modelPattern": "^(gpt-6|gpt-5\\.[23456])",
+      "levels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "protocols": [
+        "chat",
+        "responses",
+        "openrouter",
+        "custom",
+        "kimi",
+        "xai"
+      ]
+    },
+    {
+      "modelPattern": "^gpt-5",
+      "levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "protocols": [
+        "chat",
+        "responses",
+        "openrouter",
+        "custom",
+        "kimi",
+        "xai"
+      ]
+    },
+    {
+      "modelPattern": "^(o1|o3|o4)",
+      "levels": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "protocols": [
+        "chat",
+        "responses",
+        "openrouter",
+        "custom",
+        "kimi",
+        "xai"
+      ]
+    }
+  ]
+}

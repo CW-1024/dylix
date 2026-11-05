@@ -1,7 +1,7 @@
 #import "TFAIModels.h"
 #import "TFAIUIHelpers.h"
 NSString *TFAIModelKey(NSDictionary *c){return [NSString stringWithFormat:@"%@/%@",c[@"id"]?:@"",c[@"model"]?:@""];}
-NSArray<NSDictionary *> *TFAIAvailableModels(void){NSMutableArray *result=[NSMutableArray new];for(NSDictionary *c in TFAIConnections.all){NSMutableOrderedSet *names=[NSMutableOrderedSet new];if([c[@"model"] length])[names addObject:c[@"model"]];for(id m in c[@"models"])if([m isKindOfClass:NSString.class]&&[m length])[names addObject:m];for(NSString *m in names){NSMutableDictionary *item=[c mutableCopy];item[@"model"]=m;if(![m isEqual:c[@"model"]])[item removeObjectForKey:@"capabilities"];[result addObject:item];}}return result;}
+NSArray<NSDictionary *> *TFAIAvailableModels(void){NSMutableArray *result=[NSMutableArray new];for(NSDictionary *c in TFAIConnections.all){NSMutableOrderedSet *names=[NSMutableOrderedSet new];if([c[@"model"] length])[names addObject:c[@"model"]];for(id m in c[@"models"])if([m isKindOfClass:NSString.class]&&[m length])[names addObject:m];for(NSString *m in names){NSMutableDictionary *item=[c mutableCopy];item[@"model"]=m;if(![m isEqual:c[@"model"]]){[item removeObjectForKey:@"capabilities"];[item removeObjectForKey:@"testResults"];[item removeObjectForKey:@"testedAt"];}[result addObject:item];}}return result;}
 @interface TFAIModels : UITableViewController <UISearchResultsUpdating>
 @property NSDictionary *current;
 @property(copy) void (^selection)(NSDictionary *);

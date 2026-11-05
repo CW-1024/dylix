@@ -1,0 +1,6 @@
+Persona template data provenance
+
+Five template bodies, descriptions, reply-prefix strings, self-check strings and separate optional tail/prefix-template constants originate from the user-supplied com.aztut.app 1.14 (build 1) archive.
+Data was extracted read-only from Payload/Minis.app/Minis. See Personas/SOURCE.json for binary SHA-256 and the exact body offsets, byte counts and SHA-256 values.
+The user explicitly requested bundling these five bodies. Original text is retained. No third-party Swift implementation was copied; the Objective-C storage, composition and UI implementation is independent.
+This provenance note does not assign a new license to third-party template text. Dylix's GPL notice applies to the original implementation as described by the project license.

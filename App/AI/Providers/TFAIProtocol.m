@@ -1,15 +1,8 @@
 #import "TFAIProtocol.h"
+#import "TFAIRegistry.h"
 #import <arpa/inet.h>
 NSError *TFAIError(NSInteger code, NSString *message){return [NSError errorWithDomain:@"TweakForge.AI" code:code userInfo:@{NSLocalizedDescriptionKey:message?:@"AI 请求失败"}];}
-NSArray<NSDictionary *> *TFAIProtocolCatalog(void){return @[
- @{@"id":@"chat",@"name":@"OpenAI Chat Completions",@"baseURL":@"https://api.openai.com/v1",@"description":@"OpenAI 兼容接口；适用于自定义中转服务"},
- @{@"id":@"responses",@"name":@"OpenAI Responses",@"baseURL":@"https://api.openai.com/v1",@"description":@"Responses 原生输入、工具与推理状态"},
- @{@"id":@"anthropic",@"name":@"Anthropic Messages",@"baseURL":@"https://api.anthropic.com/v1",@"description":@"Messages 原生协议与工具结果"},
- @{@"id":@"deepseek",@"name":@"DeepSeek",@"baseURL":@"https://api.deepseek.com",@"description":@"官方 OpenAI 兼容接口；模型能力以实际测试为准"},
- @{@"id":@"gemini",@"name":@"Google Gemini",@"baseURL":@"https://generativelanguage.googleapis.com/v1beta",@"description":@"原生 generateContent；图片、流式、函数调用"},
- @{@"id":@"qwen",@"name":@"通义千问 · DashScope",@"baseURL":@"https://dashscope.aliyuncs.com/compatible-mode/v1",@"description":@"OpenAI 兼容接口；不同地区需调整服务地址"},
- @{@"id":@"siliconflow",@"name":@"硅基流动 · SiliconFlow",@"baseURL":@"https://api.siliconflow.cn/v1",@"description":@"OpenAI 兼容接口；模型列表以密钥权限为准，图片与工具能力请测试确认"},
- @{@"id":@"openrouter",@"name":@"OpenRouter",@"baseURL":@"https://openrouter.ai/api/v1",@"description":@"OpenAI 兼容接口；能力取决于选择的模型和路由"}];}
+NSArray<NSDictionary *> *TFAIProtocolCatalog(void){return TFAIProviderRegistry();}
 // Common gateway envelopes. Never filter model names by vendor/family.
 NSDictionary *TFAIModelPage(id payload){
  if([payload isKindOfClass:NSArray.class])return @{@"data":payload};
@@ -18,26 +11,7 @@ NSDictionary *TFAIModelPage(id payload){
  if(![page[@"data"] isKindOfClass:NSArray.class])for(NSString *key in @[@"models",@"items",@"list"]){if([page[key] isKindOfClass:NSArray.class]){page[@"data"]=page[key];break;}}
  return page;
 }
-static NSString *WireProtocol(NSString *protocol){return [@[@"deepseek",@"qwen",@"openrouter",@"siliconflow"] containsObject:protocol]?@"chat":protocol;}
-static NSArray<NSDictionary *> *TFAIFamilyReasoningOptions(NSDictionary *connection){
- NSMutableArray *result=[NSMutableArray arrayWithObject:@{@"id":@"auto",@"name":@"默认"}];NSString *protocol=connection[@"protocol"]?:@"chat",*model=[connection[@"model"] lowercaseString]?:@"";model=model.lastPathComponent;NSArray *ids=@[];
- // Match model/protocol, not the gateway's hostname. Default sends no optional fields.
- if([protocol isEqual:@"gemini"]){if([model hasPrefix:@"gemini-2.5"])ids=@[@"low",@"medium",@"high"];else if([model hasPrefix:@"gemini-3-pro"])ids=@[@"low",@"high"];else if([model hasPrefix:@"gemini-3-flash"])ids=@[@"minimal",@"low",@"medium",@"high"];}
- // Anthropic explicit thinking requires signed block replay; retain default until that path is implemented.
- else if([model hasPrefix:@"deepseek-v4"]||[model isEqual:@"deepseek-pro"]||[model isEqual:@"deepseek-flash"])ids=@[@"low",@"high",@"max"];
- else if([model hasPrefix:@"deepseek-v3.1"]||[model hasPrefix:@"deepseek-v3.2"]||([protocol isEqual:@"deepseek"]&&[model isEqual:@"deepseek-chat"]))ids=@[@"enabled"];
- else if(([model hasPrefix:@"qwen3"]||[model hasPrefix:@"qwen-plus"]||[model hasPrefix:@"qwen-turbo"])&&![model containsString:@"instruct"])ids=@[@"enabled"];
- else if([@[@"chat",@"responses",@"openrouter"] containsObject:protocol]){
-  // Family-specific fallback menus. Ultra is a gateway/Codex model extension,
-  // not a universal GPT effort. Preserve exact wire values, including xhigh.
-  BOOL gpt=[model hasPrefix:@"gpt-5"]||[model hasPrefix:@"gpt-6"];
-  BOOL fiveLevels=([model hasPrefix:@"gpt-6"]&&([model containsString:@"-sol"]||[model containsString:@"-astra"]))||([model hasPrefix:@"gpt-5.6"]&&([model containsString:@"-sol"]||[model containsString:@"-terra"]));
-  if(fiveLevels)ids=@[@"low",@"medium",@"high",@"xhigh",@"ultra"];
-  else if(gpt){BOOL extended=[model hasPrefix:@"gpt-6"];for(NSString *version in @[@"gpt-5.2",@"gpt-5.3",@"gpt-5.4",@"gpt-5.5",@"gpt-5.6"])if([model hasPrefix:version])extended=YES;ids=extended?@[@"low",@"medium",@"high",@"xhigh"]:@[@"low",@"medium",@"high"];}
-  else if([model hasPrefix:@"o1"]||[model hasPrefix:@"o3"]||[model hasPrefix:@"o4"])ids=@[@"low",@"medium",@"high"];
- }
- NSDictionary *names=@{@"minimal":@"最少",@"low":@"轻",@"medium":@"中",@"high":@"高",@"xhigh":@"极高",@"ultra":@"Ultra",@"max":@"最高",@"enabled":@"开启思考"};for(NSString *key in ids)[result addObject:@{@"id":key,@"name":names[key]?:key}];return result;
-}
+static NSString *WireProtocol(NSString *protocol){return TFAIWireProtocol(protocol);}
 // A manual capability belongs to one exact service, protocol and model. It is not
 // evidence that a same-named model on another relay supports the same parameters.
 NSString *TFAIThinkingScope(NSDictionary *c){
@@ -66,10 +40,11 @@ NSString *TFAIReasoningRequestSummary(NSDictionary *body,NSDictionary *c){
 }
 NSDictionary *TFAISanitizeProbeDiagnostics(NSDictionary *input,NSString *secret){if(![input isKindOfClass:NSDictionary.class])return @{};NSMutableDictionary *out=[NSMutableDictionary new];NSSet *numbers=[NSSet setWithArray:@[@"timestamp",@"duration",@"httpStatus"]];for(NSString *key in @[@"protocol",@"model",@"endpoint",@"httpStatus",@"requestSummary",@"responseText",@"responseBody",@"timestamp",@"duration",@"expected",@"reason",@"testImage",@"reasoningSummary"]){id value=input[key];if([numbers containsObject:key]){if([value isKindOfClass:NSNumber.class]&&isfinite([value doubleValue]))out[key]=value;continue;}if(![value isKindOfClass:NSString.class])continue;NSString *text=value;if([key isEqual:@"testImage"]){NSData *data=[[NSData alloc]initWithBase64EncodedString:text options:0];if(data.length<=128*1024&&data.length>8&&memcmp(data.bytes,"\x89PNG\r\n\x1a\n",8)==0)out[key]=text;continue;}if([key isEqual:@"endpoint"]){NSURLComponents *u=[NSURLComponents componentsWithString:text];if(!u.host.length)continue;u.user=nil;u.password=nil;u.query=nil;u.fragment=nil;text=u.URL.absoluteString?:@"";}if(secret.length)text=[text stringByReplacingOccurrencesOfString:secret withString:@"[REDACTED]"];for(NSString *pattern in @[@"(?i)(bearer\\s+)[A-Za-z0-9._~+/-]+",@"(?i)(api[_-]?key|authorization|access[_-]?token|token|secret)([\\\"' :=]+)[A-Za-z0-9._~+/-]{6,}",@"(?i)(sk-|github_pat_|AIza)[A-Za-z0-9_-]{12,}"]){NSRegularExpression *rx=[NSRegularExpression regularExpressionWithPattern:pattern options:0 error:nil];text=[rx stringByReplacingMatchesInString:text options:0 range:NSMakeRange(0,text.length) withTemplate:@"[REDACTED]"];}NSUInteger max=[key isEqual:@"responseBody"]?16000:8000;out[key]=[text substringToIndex:MIN(text.length,max)];}return out;}
 static BOOL LocalHost(NSString *host){NSString *h=host.lowercaseString;if([h isEqual:@"localhost"]||[h hasSuffix:@".local"]||[h isEqual:@"::1"]||[h isEqual:@"[::1]"])return YES;struct in_addr a;if(inet_pton(AF_INET,h.UTF8String,&a)==1){uint32_t v=ntohl(a.s_addr);return (v>>24)==10||(v>>24)==127||(v>>16)==0xc0a8||(v>>20)==0xac1||(v>>16)==0xa9fe;}return NO;}
+NSString *TFAIUserAgent(NSDictionary *c,NSError **error){id raw=c[@"userAgent"];if(!raw)return @"";if(![raw isKindOfClass:NSString.class]||[raw length]>512){if(error)*error=TFAIError(4,@"User-Agent 请填写 512 字符以内的单行英文文本。");return nil;}for(NSUInteger i=0;i<[raw length];i++){unichar ch=[raw characterAtIndex:i];if(ch<32||ch>126){if(error)*error=TFAIError(4,@"User-Agent 仅接受可打印 ASCII 字符，请去掉换行和特殊字符。");return nil;}}return [raw stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];}
 NSURL *TFAIEndpoint(NSDictionary *c,BOOL models,NSError **error){
  NSString *raw=[c[@"baseURL"] isKindOfClass:NSString.class]?c[@"baseURL"]:@"";NSURLComponents *u=[NSURLComponents componentsWithString:[raw stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]];
- BOOL tls=[u.scheme.lowercaseString isEqual:@"https"],lan=[u.scheme.lowercaseString isEqual:@"http"]&&[c[@"allowLANHTTP"] boolValue]&&LocalHost(u.host);
- if(!u.host.length||(!tls&&!lan)||u.user.length||u.password.length||u.query.length||u.fragment.length){if(error)*error=TFAIError(1,@"请填写 HTTPS Base URL；局域网 HTTP 需明确启用，地址中请勿携带账号、密钥或查询参数。");return nil;}
+ BOOL tls=[u.scheme.lowercaseString isEqual:@"https"],http=[u.scheme.lowercaseString isEqual:@"http"]&&([c[@"allowHTTP"] boolValue]||([c[@"allowLANHTTP"] boolValue]&&LocalHost(u.host)));
+ if(!u.host.length||(!tls&&!http)||u.user.length||u.password.length||u.query.length||u.fragment.length||([c[@"authMethod"] isEqual:@"oauth"]&&!tls)){if(error)*error=TFAIError(1,@"请填写 HTTPS Base URL，或为此连接明确启用 HTTP。地址中请勿携带账号、密钥或查询参数；官方 OAuth 使用 HTTPS。");return nil;}
  NSString *p=u.path?:@"";while([p hasSuffix:@"/"])p=[p substringToIndex:p.length-1];
  for(NSString *end in @[@"/chat/completions",@"/responses",@"/messages",@"/models"])if([p hasSuffix:end]){p=[p substringToIndex:p.length-end.length];break;}
  NSString *original=c[@"protocol"]?:@"chat",*protocol=WireProtocol(original);if(!p.length)p=[original isEqual:@"gemini"]?@"/v1beta":[original isEqual:@"deepseek"]?@"":@"/v1";

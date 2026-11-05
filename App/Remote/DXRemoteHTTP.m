@@ -28,7 +28,7 @@ NSDictionary *DXRemoteParseRequest(NSData *bytes,BOOL *complete,NSInteger *failu
  if(![headers[@"host"] length]||headers[@"transfer-encoding"]||headers[@"upgrade"]||headers[@"expect"]){*failure=400;return nil;}
  NSString *length=headers[@"content-length"];NSUInteger count=0;
  if(length){if(!length.length||length.length>8||[length rangeOfCharacterFromSet:NSCharacterSet.decimalDigitCharacterSet.invertedSet].location!=NSNotFound){*failure=400;return nil;}count=length.integerValue;}
- NSUInteger maxBody=[start[1] isEqual:@"/api/v1/workspace"]?2*1024*1024:([start[0] isEqual:@"PUT"]?8*1024*1024:8192);
+ NSUInteger maxBody=[start[1] isEqual:@"/api/v1/workspace"]?2*1024*1024:([start[1] isEqual:@"/api/v1/flex/reply"]?256*1024:([start[0] isEqual:@"PUT"]?8*1024*1024:8192));
  if(count>maxBody){*failure=413;return nil;}
  if(![@[@"POST",@"PUT",@"PROPFIND",@"LOCK"] containsObject:start[0]]&&count){*failure=400;return nil;}
  if(bytes.length<headerEnd+count)return nil;

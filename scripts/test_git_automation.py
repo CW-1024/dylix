@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Real libgit2 archive transactions. Uses only temporary repository copies."""
-import pathlib, subprocess, tempfile, json, hashlib, os
+import pathlib, subprocess, tempfile, json, hashlib
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 OUT=ROOT/'evidence/0.6.3-git-automation'; OUT.mkdir(parents=True,exist_ok=True)
 exe='/private/tmp/tf-git-auto-fixture'
@@ -71,7 +71,7 @@ with tempfile.TemporaryDirectory(prefix='tf-archive-') as temp:
  check(fingerprints=={str(p.relative_to(original)):hashlib.sha256(p.read_bytes()).hexdigest() for p in original.rglob('*') if p.is_file()},'original fixture read-only; changes only in copy')
 # Run real Theos source copies, auditing both content and original timestamps.
 from test_local_projects import copy_sources
-original=pathlib.Path(os.environ.get('DYLIX_TEST_PROJECT',str(ROOT/'fixtures/optional-local-project')))
+original=pathlib.Path('/Users/xuegao/彩虹编译/dyyy/AutoMessagePlugin/AutoMessagePlugin')
 if original.exists():
  def audit():return {str(p.relative_to(original)):(hashlib.sha256(p.read_bytes()).hexdigest(),p.stat().st_mtime_ns) for p in original.rglob('*') if p.is_file() and not p.is_symlink()}
  before=audit()

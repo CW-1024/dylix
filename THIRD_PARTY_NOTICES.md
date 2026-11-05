@@ -30,7 +30,7 @@
 - Logos 的实际源码在 Resources/logos，使用 GPL-3.0-or-later。
 - 原生 AI 交互研究参考不代表复制代码或链接其运行时，见 AI-Research.txt；另参考 OpenMinis（https://github.com/OpenMinis/OpenMinis）的流式呈现与生命周期设计，Dylix 使用自己的 UIKit 实现。
 - 仓库中的 Apple SDK 16.4 / 26.0 与 Apple 系统 framework 保留 Apple 条款，不属于本项目 GPL 许可授权范围。
-- 未分发个人 FLEX 测试样例、参考 macOS Perl 副本、设备日志、模型会话或用户附件。
+- 不分发用户项目、参考 macOS Perl 副本、设备日志、模型会话或用户附件。内置 FLEX 插件与随包示例另见下方许可和对应源码。
 
 ## 预编译工具链
 
@@ -43,3 +43,20 @@ Release 的工具链包包含 ios_system、LLVM/Clang/LLD、Perl 对应 xcframew
 离线编辑器 **Monaco Editor 0.52.2**，Microsoft Corporation，MIT许可证。来源为npm官方包 https://registry.npmjs.org/monaco-editor/-/monaco-editor-0.52.2.tgz ，分发min/vs AMD资源，版本与来源记录于Resources/RemoteWeb/monaco/SOURCE.json。完整许可保留于该目录LICENSE及Resources/ThirdPartyNotices/monaco-editor-MIT.txt；无公网CDN。
 
 Build152：远程工作台轻量编辑器与文件预览复用已列出的highlight.js 11.11.1离线构建，副本及BSD-3-Clause许可位于Resources/RemoteWeb/highlight.js和highlight-LICENSE。
+
+- **已退休 Persona 模板数据** — 来源为 com.aztut.app 1.14（build 1）安装包。五份历史正文已退出当前出厂目录；非破坏迁移保留全部既有本机记录。原数据指纹见 `Resources/Personas/SOURCE.json`，来源说明见 [`Persona-Templates-Source.txt`](Resources/ThirdPartyNotices/Persona-Templates-Source.txt)。Objective-C 实现独立编写，未复制 Swift 代码。
+- **公开 Persona 目录** — 仅包含 MDX-Tom/gpt-instruct 与 yynxxxxx/Codex-X 的四项 MIT 许可数据，逐项来源、revision 与 SHA-256 见 Resources/Personas/SOURCE.json；完整许可保留于 Resources/ThirdPartyNotices/GPT-Instruct-LICENSE.txt 和 Codex-X-LICENSE.txt。私有无许可目录正文不随本仓库或公开 IPA 分发。
+
+## Build163 通用 Agent 结构参考
+
+参考OpenMinis（GPL-3.0，commit `1a71df0f381cefde80bf912b723de6f9831bc177`）的ProviderTypes、ThinkingLevelCatalog、OAuthRefreshSingleFlight、SkillStore、MCPStore、BrowserUseManager目录分层与流程。新增实现为独立Objective-C代码，未复制Swift实现或提示词正文；四份插件开发技能为本项目新写文本，适用本仓库GPL-3.0-or-later。没有新增第三方依赖。协议资料与来源见docs/AGENT_EXTENSIONS.md。
+
+## Build164 工具注册表结构参考
+
+同一 OpenMinis revision 的 ToolDefinitions、ToolPreflight、FileTools、MemoryTools 仅用于研究定义、预检、条件下发与本地数据边界。分层注册表及隔离只读实现独立使用 Objective-C 编写，适用本仓库 GPL-3.0-or-later，未复制 Swift 片段；未引入 AzTuT ReverseTools 或其默认开启逻辑。未新增第三方依赖。实现与边界见 docs/TOOL_REGISTRY.md。
+
+## FLEX 插件与现场工具
+
+- FLEX 上游 https://github.com/FLEXTool/FLEX ，BSD-3-Clause，原文保留于 Resources/ThirdPartyNotices/FLEX-LICENSE.txt；FLEX++ 修改及 Dylix 桥接对应源码随 1.0.8 Release 的 FLEX-1.0.0-source.zip 提供。
+- Capstone 相关许可保留于 Resources/ThirdPartyNotices/Capstone-LICENSE.txt，源文件头部声明继续保留。
+- 进程内触摸适配的 KIF / EarlGrey 来源及 Apache-2.0 原文见 FLEXTouch-NOTICE 和 FLEXTouch-DylixTouch-APACHE-2.0.txt。

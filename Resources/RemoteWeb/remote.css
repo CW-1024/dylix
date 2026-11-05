@@ -51,3 +51,9 @@ body.editor-fullscreen{overflow:hidden}#module-info.editor-focus{position:fixed;
 @media(max-width:700px){.navigation-collapsed .sidebar nav{display:none}.editor-page .main-content{padding:18px 12px}.editor-page .page-heading{gap:8px}.editor-page .page-heading p{display:none}.editor-page .page-heading h1{font-size:20px}.editor-tool-group+.editor-tool-group{padding-left:0;border:0}.editor-toolbar{gap:6px;padding:7px}.editor-tool-group{gap:5px}.editor-toolbar button,.editor-toolbar summary{padding:6px 8px}.editor-toolbar select{max-width:136px}.workspace-grid.editor-grid{grid-template-columns:minmax(0,1fr)}.editor-grid>.editor-splitter{display:none}.editor-grid>.file-tree{position:absolute;inset:0 auto 0 0;width:min(280px,82%);height:100%;z-index:5;border-right:1px solid var(--line);box-shadow:12px 0 32px #0003}.editor-grid.tree-collapsed{grid-template-columns:minmax(0,1fr)}#module-info.editor-focus{inset:0;border-radius:0;padding:8px}.editor-page #monaco-editor{height:calc(100vh - 320px);height:calc(100dvh - 320px);min-height:340px}}
 
 @media(max-width:700px){.editor-page .editor-focus #monaco-editor{min-height:0}}
+
+/* Shared native AI context, metadata only. */
+.ai-context{margin:0 0 14px;padding:12px 16px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.ai-context summary{cursor:pointer;font-weight:600;line-height:1.6}
+.ai-context-body{font-size:13px;line-height:1.65;color:var(--muted)}
+.ai-context-body p{margin:9px 0}

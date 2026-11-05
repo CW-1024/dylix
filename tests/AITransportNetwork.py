@@ -2,7 +2,7 @@
 """Real URLSession against local protocol fixtures; never uses an API key."""
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
-import json, subprocess, threading, time, base64, struct, zlib
+import json, os, subprocess, threading, time, base64, struct, zlib
 def png_colors(encoded):
     """Decode the generated image pixels, never infer expected colors from prompt text."""
     data=base64.b64decode(encoded); offset=8; packed=b''
@@ -89,9 +89,12 @@ class Fixture(BaseHTTPRequestHandler):
 if __name__=='__main__':
     root=Path(__file__).resolve().parents[1]
     binary=Path('/private/tmp/tf-ai-transport-tests')
-    subprocess.run(['xcrun','clang','-isysroot','/Library/Developer/CommandLineTools/SDKs/MacOSX15.2.sdk','-fobjc-arc','-fmodules','-DTFAI_TRANSPORT_TESTING=1',str(root/'tests/AITransportTests.m'),*[str(x) for x in (root/'App/AI/Providers').glob('*.m')],*[str(x) for x in (root/'App/AI/Transport').glob('*.m')],'-framework','Foundation','-framework','Security','-framework','CoreGraphics','-framework','ImageIO','-o',str(binary)],check=True)
+    providers=[x for x in (root/'App/AI/Providers').glob('*.m') if x.name!='TFAIOAuth.m']
+    subprocess.run(['xcrun','clang','-isysroot','/Library/Developer/CommandLineTools/SDKs/MacOSX15.2.sdk','-fobjc-arc','-fmodules','-DTFAI_TRANSPORT_TESTING=1',str(root/'tests/AITransportTests.m'),str(root/'tests/ProviderOAuthFixture.m'),*[str(x) for x in providers],*[str(x) for x in (root/'App/AI/Transport').glob('*.m')],'-framework','Foundation','-framework','Security','-framework','CoreGraphics','-framework','ImageIO','-o',str(binary)],check=True)
     server=ThreadingHTTPServer(('127.0.0.1',0),Fixture)
     threading.Thread(target=server.serve_forever,daemon=True).start()
-    try:result=subprocess.run([str(binary),'http://127.0.0.1:'+str(server.server_port),'--ai-runtime-test'],check=False)
+    environment=os.environ.copy()
+    environment['DYLIX_PROVIDER_RESOURCES']=str(root/'Resources/AIProviders')
+    try:result=subprocess.run([str(binary),'http://127.0.0.1:'+str(server.server_port),'--ai-runtime-test'],check=False,env=environment)
     finally:server.shutdown()
     raise SystemExit(result.returncode)

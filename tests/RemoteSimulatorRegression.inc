@@ -1,5 +1,6 @@
 #import "../App/AI/Background/TFAIAudioBackground.h"
 #import "../App/AI/AIContracts.h"
+#import "../App/Remote/DXFlexBridge.h"
 // Compiled only in the simulator; no HTTP/debug endpoints in any device build.
 static UIViewController *DXRemoteRegressionController(void){
  UIViewController *controller=DXRemoteSettingsController();
@@ -18,8 +19,18 @@ static UIViewController *DXRemoteRegressionController(void){
   if(![command isKindOfClass:NSDictionary.class])return;
   [NSFileManager.defaultManager removeItemAtPath:commandFile error:nil];
   NSString *action=command[@"action"];
-  if([action isEqual:@"fixture_model"]){[TFAIConnections save:@{@"id":@"remote-ui-fixture",@"name":@"本地回归服务",@"protocol":@"chat",@"baseURL":@"http://localhost:18991/v1",@"model":@"gpt-5-fixture",@"models":@[@"gpt-5-fixture",@"gpt-5-fixture-alt"],@"allowLANHTTP":@YES,@"toolsEnabled":@NO} secret:nil error:nil];}
+  if([action isEqual:@"fixture_model"]){[TFAIConnections save:@{@"id":@"remote-ui-fixture",@"name":@"本地回归服务",@"protocol":@"chat",@"baseURL":@"http://localhost:18991/v1",@"model":@"gpt-5-fixture",@"models":@[@"gpt-5-fixture",@"gpt-5-fixture-alt"],@"allowLANHTTP":@YES,@"toolsEnabled":@([command[@"tools"] boolValue])} secret:nil error:nil];}
   if([action isEqual:@"fixture_model_remove"])[TFAIConnections remove:@"remote-ui-fixture"];
+  if([action isEqual:@"flex_live_fixture"]){
+   NSString *device=command[@"device"],*session=command[@"session"],*output=[documents stringByAppendingPathComponent:@"RemoteFlexResult.json"];
+   [NSFileManager.defaultManager removeItemAtPath:output error:nil];
+   [DXFlexBridge.shared publish:@{@"report":@"fixture report",@"bundleID":@"fixture.app",@"className":@"UIView"} device:device error:nil];
+   [DXFlexBridge.shared bindSession:session device:device];
+   [DXFlexBridge.shared enqueueForSession:session operation:@"current" arguments:@{} completion:^(NSDictionary *result,NSError *error){
+    NSDictionary *answer=error?@{@"error":error.localizedDescription}:@{@"result":result?:@{}};
+    [[NSJSONSerialization dataWithJSONObject:answer options:0 error:nil] writeToFile:output atomically:YES];
+   }];
+  }
   if([action isEqual:@"awake"]){TFScreenAwakeSet(command[@"reason"],[command[@"active"] boolValue]);}
   if([action isEqual:@"dav_picker"])[controller performSelector:NSSelectorFromString(@"chooseDAV")];
   if([action isEqual:@"approve"])[DXRemoteService.shared approve:command[@"id"] accepted:YES];
