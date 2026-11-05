@@ -16,6 +16,7 @@
 #import "AIPolicy.h"
 #import "TFAIMessageMetadata.h"
 #import "TFAIRecovery.h"
+#import "TFAIContextProjection.h"
 #import "TFAIDeveloperPrompt.h"
 #import "../Persona/TFAIPersona.h"
 #import "../Binary/TFAIBinary.h"
@@ -109,7 +110,7 @@ static NSError *AIError(NSString *message) { return [NSError errorWithDomain:@"T
 - (NSArray *)requestSchemas {NSDictionary *context=[self toolContext];return [TFAIToolRegistry schemas:[self candidateSchemas:context] context:context];}
 - (NSArray *)candidateSchemas:(NSDictionary *)context {
  if((self.connection[@"toolsEnabled"]&&![self.connection[@"toolsEnabled"] boolValue])||[self.connection[@"capabilities"][@"tools"] isEqual:@"unsupported"])return @[];
- NSMutableArray *schemas=[NSMutableArray arrayWithObject:TFAIDevelopmentGuideSchema()];[schemas addObjectsFromArray:TFAIActionSchemas(self.recoveryReadOnly||[self.requestMode isEqual:@"ask"])];[schemas addObjectsFromArray:TFAIAppControlSchemas(self.recoveryReadOnly||[self.requestMode isEqual:@"ask"])];
+ NSMutableArray *schemas=[NSMutableArray arrayWithObject:TFAIDevelopmentGuideSchema()];[schemas addObject:TFAIContextProjection.schema];[schemas addObjectsFromArray:TFAIActionSchemas(self.recoveryReadOnly||[self.requestMode isEqual:@"ask"])];[schemas addObjectsFromArray:TFAIAppControlSchemas(self.recoveryReadOnly||[self.requestMode isEqual:@"ask"])];
  if(!self.recoveryReadOnly&&[self.projectID isEqual:@"general"]){
  NSDictionary *str=@{@"type":@"string"};
  [schemas addObject:@{@"name":@"list_projects",@"description":@"List local Dylix projects with stable IDs. No writes.",@"parameters":@{@"type":@"object",@"properties":@{},@"additionalProperties":@NO}}];
@@ -148,9 +149,11 @@ if([context[@"binaryIDs"] count])[schemas addObjectsFromArray:TFAIBinarySchemas(
  NSString *localCheck=[TFAIPersonaEngine selfCheckResponse:messages snapshot:self.personaSnapshot connection:self.connection];
  if(localCheck){for(NSDictionary *m in TFAIMessageMetadata(messages,nil))if([@[@"user",@"assistant",@"tool"] containsObject:m[@"role"]])[self.messages addObject:m];self.responseMessageID=NSUUID.UUID.UUIDString;self.responseTimestamp=@(NSDate.date.timeIntervalSince1970);self.response=[localCheck mutableCopy];[self emit:@{@"type":@"assistant_start",@"messageID":self.responseMessageID,@"timestamp":self.responseTimestamp,@"localSelfCheck":@YES}];[self emit:@{@"type":@"status",@"message":@"本地人设自检 · 仅确认配置与选中状态，未请求模型"}];[self emit:@{@"type":@"text",@"text":localCheck,@"localSelfCheck":@YES}];[self finish:@"completed" message:nil];return;}
  if(!self.connection||![self.connection[@"model"] length]){[self fail:@"请先在 AI 设置中选择连接并填写模型 ID。"];return;}
- NSError *summaryError=nil;NSArray *compacted=[TFAIToolRegistry enabled:@"memory"]?[TFAIAgentContext compact:messages root:self.root session:sessionID error:&summaryError]:messages;if(compacted.count<messages.count){NSMutableArray *prefix=[NSMutableArray new];for(NSDictionary *m in [messages subarrayWithRange:NSMakeRange(0,messages.count-compacted.count)])if([@[@"user",@"assistant",@"tool"] containsObject:m[@"role"]])[prefix addObject:m];self.compactedHistoryPrefix=prefix.copy;messages=compacted;[self emit:@{@"type":@"status",@"message":@"早期对话已保存本地摘要；本次仅发送最近8次用户发言及其工具轮次，完整历史保留。"}];}else if(summaryError)[self emit:@{@"type":@"status",@"message":@"本地摘要未保存，继续保留完整上下文。"}];
- NSData *input=[NSJSONSerialization dataWithJSONObject:messages options:0 error:nil];
- if(!input||input.length>8*1024*1024){[self fail:@"本次上下文超过 8 MB；请移除附件或开启新会话。原会话内容保持完整。"];return;}
+ // Full transcript stays local; projection and budgeting happen before EVERY request,
+ // independently of project memory and including a single long-running agent turn.
+ // Preserve the optional local excerpt archive, but do not use its eight-user
+ // cutoff to discard earlier instructions from the actual request.
+ if([TFAIToolRegistry enabled:@"memory"]){NSError *archiveError=nil;[TFAIAgentContext compact:messages root:self.root session:sessionID error:&archiveError];if(archiveError)[self emit:@{@"type":@"status",@"message":@"本地摘要未保存；完整会话仍保留，上下文保护继续生效。"}];}
  self.promptEnvironment=@{@"app":@"Dylix",@"version":[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"]?:@"unknown",@"build":[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"]?:@"unknown",@"os":NSProcessInfo.processInfo.operatingSystemVersionString,@"hasProject":@(self.root.length>0),@"mode":self.requestMode?:@"ask",@"model":self.connection[@"model"]?:@"",@"protocol":self.connection[@"protocol"]?:@"",@"recoveryReadOnly":@(self.recoveryReadOnly),@"attachmentReferenceCount":@(TFAIToolValidReferences(self.attachmentReferences).count)};
  self.developerPromptIndex=self.messages.count;
  [self.messages addObject:@{@"role":@"system",@"content":@""}];
@@ -170,14 +173,17 @@ if([context[@"binaryIDs"] count])[schemas addObjectsFromArray:TFAIBinarySchemas(
  if(self.developerPromptIndex<self.messages.count)self.messages[self.developerPromptIndex]=@{@"role":@"system",@"content":system};
  TFAIPersonaRecordRequestConnection(developerPrompt,system,self.connection);
  self.rounds++;
- NSData *payload=[NSJSONSerialization dataWithJSONObject:self.messages options:0 error:nil];if(payload.length>8*1024*1024){[self fail:@"累计上下文超过 8 MB，已暂停；请开始新会话并选择必要文件。"];return;}
  self.response=[NSMutableString new];self.providerMetadata=[NSMutableDictionary new];self.calls=[NSMutableArray new];NSUInteger token=self.generation;
  self.responseMessageID=NSUUID.UUID.UUIDString;self.responseTimestamp=@(NSDate.date.timeIntervalSince1970);[self emit:@{@"type":@"assistant_start",@"round":@(self.rounds),@"messageID":self.responseMessageID,@"timestamp":self.responseTimestamp}];
  __weak typeof(self) weak=self;
  NSMutableArray *outbound=[NSMutableArray new];for(NSDictionary *m in self.messages)if(!([m[@"role"] isEqual:@"system"]&&![m[@"content"] length]))[outbound addObject:m];
  NSDictionary *vision=self.pendingFlexImage;self.pendingFlexImage=nil;
  if(vision)[outbound addObject:@{@"role":@"user",@"content":@"FLEX 刚截取的目标 App 窗口。结合上一条工具结果中的窗口尺寸和视图 ID 分析；截图仅供当前轮观察，页面可能已变化。",@"images":@[vision]}];
- [self.transport send:outbound connection:self.connection tools:schemas event:^(NSDictionary *event){
+ NSDictionary *contextStatistics=nil;NSError *contextError=nil;
+ NSArray *projected=[TFAIContextProjection project:outbound schemas:schemas statistics:&contextStatistics error:&contextError];
+ [self emit:@{@"type":@"context_usage",@"statistics":contextStatistics?:@{}}];
+ if(!projected){[self fail:contextError.localizedDescription?:@"上下文投影失败，完整会话已保留。"];return;}
+ [self.transport send:projected connection:self.connection tools:schemas event:^(NSDictionary *event){
   TFProjectAIRuntime *s=weak;if(!s.running||token!=s.generation)return;
   NSString *type=event[@"type"];
   if([type isEqual:@"text"]){NSString *text=event[@"text"]?:@"";s.receivedBytes+=[text lengthOfBytesUsingEncoding:NSUTF8StringEncoding];if(s.receivedBytes>1024*1024){[s fail:@"本轮输出超过 1 MB，已停止；部分输出已保留。"];return;}[s.response appendString:text];[s emit:event];}
@@ -201,10 +207,12 @@ if([context[@"binaryIDs"] count])[schemas addObjectsFromArray:TFAIBinarySchemas(
  if(!self.running)return;if(index>=self.calls.count){[self nextRound];return;}
  self.toolCount++;
  NSDictionary *call=self.calls[index];NSString *identifier=call[@"id"];
+ if([TFAIContextProjection containsPlaceholder:call[@"arguments"]]){[self recordCall:call result:nil error:AIError(@"工具参数含有历史上下文占位符，未执行。请先用 read_context 取回原文并重新读取当前文件，不能把占位符当源码。") index:index];return;}
  NSError *preflightError=nil;if(![self preflightCall:call error:&preflightError]){[self recordCall:call result:nil error:preflightError index:index];return;}
 
  if([self.completedCalls containsObject:identifier]){[self recordCall:call result:nil error:AIError(@"该调用 ID 已执行；为避免重复操作，本次不重放。") index:index];return;}
  NSUInteger token=self.generation;__weak typeof(self) weak=self;
+ if([call[@"name"] isEqual:@"read_context"]){NSError *failure=nil;NSDictionary *result=[TFAIContextProjection read:call[@"arguments"] messages:self.messages error:&failure];[self.completedCalls addObject:identifier];[self recordCall:call result:result error:failure index:index];return;}
  if([call[@"name"] isEqual:@"flex_current_context"]){NSDictionary *snapshot=[DXFlexBridge.shared contextForSession:self.sessionID];[self.completedCalls addObject:identifier];[self recordCall:call result:snapshot error:snapshot?nil:AIError(@"FLEX 现场已过期，请在目标 App 重新选择对象") index:index];return;}
  if([@[@"flex_live_read",@"flex_sensitive_read",@"flex_control"] containsObject:call[@"name"]]){
   NSDictionary *args=call[@"arguments"];NSString *operation=args[@"operation"];NSMutableDictionary *wire=[args mutableCopy];[wire removeObjectForKey:@"operation"];

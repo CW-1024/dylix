@@ -90,7 +90,7 @@ if __name__=='__main__':
     root=Path(__file__).resolve().parents[1]
     binary=Path('/private/tmp/tf-ai-transport-tests')
     providers=[x for x in (root/'App/AI/Providers').glob('*.m') if x.name!='TFAIOAuth.m']
-    subprocess.run(['xcrun','clang','-isysroot','/Library/Developer/CommandLineTools/SDKs/MacOSX15.2.sdk','-fobjc-arc','-fmodules','-DTFAI_TRANSPORT_TESTING=1',str(root/'tests/AITransportTests.m'),str(root/'tests/ProviderOAuthFixture.m'),*[str(x) for x in providers],*[str(x) for x in (root/'App/AI/Transport').glob('*.m')],'-framework','Foundation','-framework','Security','-framework','CoreGraphics','-framework','ImageIO','-o',str(binary)],check=True)
+    subprocess.run(['xcrun','clang','-isysroot','/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk','-fobjc-arc','-fmodules','-DTFAI_TRANSPORT_TESTING=1',str(root/'tests/AITransportTests.m'),str(root/'tests/ProviderOAuthFixture.m'),str(root/'App/AI/Core/TFAIContextProjection.m'),*[str(x) for x in providers],*[str(x) for x in (root/'App/AI/Transport').glob('*.m')],'-framework','Foundation','-framework','Security','-framework','CoreGraphics','-framework','ImageIO','-o',str(binary)],check=True)
     server=ThreadingHTTPServer(('127.0.0.1',0),Fixture)
     threading.Thread(target=server.serve_forever,daemon=True).start()
     environment=os.environ.copy()

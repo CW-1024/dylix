@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-05",
+  "appVersion": "1.0.8",
+  "build": "194",
+  "zip": "passed",
+  "codesignDeepStrict": "passed",
+  "ipaBytes": 139895643,
+  "sha256": "909717d0152135db24683e1d81a727a67d83b774a926defca0770eb722689c1a",
+  "bundles": [
+    {
+      "path": "Payload/TheosMobileCompiler.app/Info.plist",
+      "version": "1.0.8",
+      "build": "194",
+      "minimumOS": "15.0"
+    },
+    {
+      "path": "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeActivity.appex/Info.plist",
+      "version": "1.0.8",
+      "build": "194",
+      "minimumOS": "16.2"
+    },
+    {
+      "path": "Payload/TheosMobileCompiler.app/PlugIns/TweakForgeShare.appex/Info.plist",
+      "version": "1.0.8",
+      "build": "194",
+      "minimumOS": "15.0"
+    }
+  ],
+  "contextProjectionChecks": 58,
+  "legacyToolChecks": 348,
+  "protocolFixtureChecks": 114,
+  "nativeUISessionPersistenceChecks": 3,
+  "publicSourceContextAndProtocolRegression": "passed",
+  "realProviderAPICalls": 0,
+  "userReported877KReproduced": false
+}

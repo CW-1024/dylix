@@ -1,12 +1,4 @@
 #import <Foundation/Foundation.h>
-// This schema/permission fixture never decodes screenshots. Real UIKit image
-// handling is validated separately by the simulator, not by this stub.
-@interface UIImage : NSObject
-+ (instancetype)imageWithData:(NSData *)data;
-@end
-@implementation UIImage
-+ (instancetype)imageWithData:(NSData *)data{return nil;}
-@end
 #define main ExistingBudgetMain
 #import "AIRuntimeBudgetTests.m"
 #undef main

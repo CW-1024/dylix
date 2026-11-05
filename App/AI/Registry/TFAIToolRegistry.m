@@ -9,6 +9,7 @@ static NSDictionary *Declarations(void){
    for(NSString *name in names)all[name]=@{@"name":name,@"description":[NSString stringWithFormat:@"%@ (%@; %@)",name,effect,scope],@"effect":effect,@"scope":scope,@"tier":tier,@"permissionTier":tier,@"approvalPolicy":approval,@"requiresUserApproval":@(![approval isEqual:@"none"]),@"requiresForeground":@(foreground),@"module":module,@"availability":availability};
   };
   add(@[@"read_development_guide",@"read_app_state"],@"read",@"app_public_state",@"A",@"none",NO,@"core",@"always");
+  add(@[@"read_context"],@"read",@"current_session_history",@"A",@"none",NO,@"core",@"session");
   add(@[@"set_app_settings"],@"write",@"declared_app_preferences",@"A",@"existing",YES,@"core",@"always");
   add(@[@"app_action"],@"mixed",@"declared_app_actions",@"A",@"existing",NO,@"core",@"actions");
   add(@[@"list_projects"],@"read",@"local_project_index",@"A",@"none",NO,@"core",@"bridge");
@@ -51,6 +52,7 @@ static BOOL Available(NSDictionary *entry,NSDictionary *c){
  if([entry[@"requiresForeground"] boolValue]&&![c[@"foreground"] boolValue])return NO;
  NSString *check=entry[@"availability"];
  if([check isEqual:@"always"]||[check isEqual:@"actions"])return YES;
+ if([check isEqual:@"session"])return [c[@"hasSession"] boolValue];
  if([check isEqual:@"bridge"])return [c[@"hasBridge"] boolValue];
  if([check isEqual:@"project"])return [c[@"hasProject"] boolValue];
  if([check isEqual:@"projectBridge"])return [c[@"hasProject"] boolValue]&&[c[@"hasBridge"] boolValue];

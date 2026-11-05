@@ -103,6 +103,12 @@ UIViewController *TFAIChat93Regression(void){
  TFChat93Runtime *runtime=[TFChat93Runtime new];UIViewController *chat=TFAIChatFixtureController(project,scope,runtime,^(NSString *p,NSUInteger l){});
  dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),dispatch_get_main_queue(),^{
  NSMutableArray *checks=[NSMutableArray new];void(^check)(BOOL,NSString *)=^(BOOL pass,NSString *name){[checks addObject:@{@"name":name,@"pass":@(pass)}];};
+ if([NSProcessInfo.processInfo.arguments containsObject:@"--context194-fixture"]){
+ NSDictionary *stats=@{@"beforeTextJSONBytes":@3299469,@"afterTextJSONBytes":@25219,@"estimatedTextTokens":@12610,@"argumentCallsOffloaded":@30,@"resultsOffloaded":@0,@"toolBatchesCollapsed":@0,@"toolBreakdown":@{@"propose_patch":@{@"calls":@30,@"argumentsJSONBytes":@3000000,@"resultsUTF8Bytes":@6000}}};
+ [chat performSelector:NSSelectorFromString(@"handleEvent:") withObject:@{@"type":@"context_usage",@"statistics":stats}];
+ [chat performSelector:NSSelectorFromString(@"handleEvent:") withObject:@{@"type":@"usage",@"usage":@{@"input_tokens":@9200,@"output_tokens":@42}}];
+ NSMutableDictionary *active=[chat valueForKey:@"session"];check([active[@"contextStatistics"] isEqual:stats],@"context diagnostics consumed by chat UI");check([active[@"lastProviderUsage"][@"input_tokens"] isEqual:@9200],@"provider actual input kept separate from local estimate");[TFAISessions save:active project:scope error:nil];NSDictionary *reloaded=[TFAISessions loadSession:active[@"id"] project:scope];check([reloaded[@"contextStatistics"] isEqual:stats]&&[reloaded[@"lastProviderUsage"][@"input_tokens"] isEqual:@9200],@"diagnostics survive native session persistence");NSString *docs=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;[[NSJSONSerialization dataWithJSONObject:checks options:NSJSONWritingPrettyPrinted error:nil] writeToFile:[docs stringByAppendingPathComponent:@"context194-ui-tests.json"] atomically:YES];return;
+ }
  if([NSProcessInfo.processInfo.arguments containsObject:@"--chat103-fixture"]){
  NSMutableDictionary *active=[chat valueForKey:@"session"];active[@"turnTimings"]=@{@"fixture-user":@{@"start":@(NSDate.date.timeIntervalSince1970-5)}};
  NSMutableArray *liveMessages=[[chat valueForKey:@"messages"] mutableCopy];[liveMessages filterUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSDictionary *m,NSDictionary *bindings){return ![m[@"role"] isEqual:@"tool"];}]];[chat setValue:liveMessages forKey:@"messages"];

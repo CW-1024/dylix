@@ -10,7 +10,7 @@ with tempfile.TemporaryDirectory(prefix='tf-runtime-budget-') as temp:
     binary=temp/'tests'
     wrapper=temp/'runner.m'
     wrapper.write_text('#define main BudgetFixtureMain\n#import '+chr(34)+str(root/'tests/AIRuntimeBudgetTests.m')+chr(34)+'\n#undef main\nint main(){@autoreleasepool{dispatch_semaphore_t done=dispatch_semaphore_create(0);__block int code=1;NSThread *worker=[[NSThread alloc]initWithBlock:^{code=BudgetFixtureMain();dispatch_semaphore_signal(done);}];worker.stackSize=64*1024*1024;[worker start];return dispatch_semaphore_wait(done,dispatch_time(DISPATCH_TIME_NOW,60*NSEC_PER_SEC))?2:code;}}\n')
-    subprocess.run(['xcrun','clang','-isysroot',sdk,'-I'+str(temp),'-fobjc-arc','-fblocks','-Wno-incomplete-implementation','-Wno-nullability-completeness',str(wrapper),str(root/'App/AI/Core/TFAIRecovery.m'),str(root/'App/AI/Registry/TFAIToolRegistry.m'),str(root/'App/AI/Persona/TFAIPersona.m'),str(root/'App/Remote/DXFlexBridge.m'),'-framework','Foundation','-o',str(binary)],check=True)
+    subprocess.run(['xcrun','clang','-isysroot',sdk,'-I'+str(temp),'-fobjc-arc','-fblocks','-Wno-incomplete-implementation','-Wno-nullability-completeness',str(wrapper),str(root/'App/AI/Core/TFAIRecovery.m'),str(root/'App/AI/Core/TFAIContextProjection.m'),str(root/'App/AI/Registry/TFAIToolRegistry.m'),str(root/'App/AI/Persona/TFAIPersona.m'),str(root/'App/Remote/DXFlexBridge.m'),'-framework','Foundation','-o',str(binary)],check=True)
     # Large-stack worker accommodates synchronous fixture callbacks for 1,200 tools.
     subprocess.run([str(binary)],check=True)
 # Lifecycle regression guards: navigation must not be treated as stop/background.
