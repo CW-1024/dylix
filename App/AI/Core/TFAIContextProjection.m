@@ -1,7 +1,8 @@
 #import "TFAIContextProjection.h"
+#import <math.h>
 #import <CommonCrypto/CommonDigest.h>
 
-static const NSUInteger ContextBudget = 256 * 1024;
+static NSString * const ContextBudgetKey = @"TFAIContextBudgetKiB";
 static NSString * const ContextMarker = @"[DYLIX_CONTEXT_OFFLOADED]";
 static NSData *Encode(id value) { return [NSJSONSerialization dataWithJSONObject:value options:(NSJSONWritingSortedKeys|NSJSONWritingFragmentsAllowed) error:nil]; }
 static NSString *JSON(id value) { NSData *d=Encode(value); return d?[[NSString alloc]initWithData:d encoding:NSUTF8StringEncoding]:@"{}"; }
@@ -44,6 +45,15 @@ static id Arguments(id value,NSString *ref,NSUInteger depth) {
 }
 
 @implementation TFAIContextProjection
++ (NSUInteger)budgetKiB {
+ id stored=[NSUserDefaults.standardUserDefaults objectForKey:ContextBudgetKey];
+ if(![stored isKindOfClass:NSNumber.class])return 256;
+ double value=[stored doubleValue];return isfinite(value)&&value>=64&&value<=16384&&floor(value)==value?(NSUInteger)value:256;
+}
++ (BOOL)setBudgetKiB:(NSUInteger)value {
+ if(value<64||value>16384)return NO;
+ [NSUserDefaults.standardUserDefaults setInteger:value forKey:ContextBudgetKey];return YES;
+}
 + (NSString *)usageReport:(NSDictionary *)stats providerUsage:(NSDictionary *)usage {
  if(!stats.count)return @"发送一次消息后即可查看本轮上下文统计。";
  BOOL blocked=[stats[@"blockedBeforeRequest"] boolValue];
@@ -79,6 +89,7 @@ static id Arguments(id value,NSString *ref,NSUInteger depth) {
  return @{@"ref":ref,@"text":[text substringWithRange:NSMakeRange(offset,end-offset)],@"offset":@(offset),@"next_offset":end<text.length?@(end):NSNull.null,@"total_utf16":@(text.length),@"original_bytes":@([text lengthOfBytesUsingEncoding:NSUTF8StringEncoding]),@"sha256":Digest(text),@"historical":@YES};
 }
 + (NSArray *)project:(NSArray *)messages schemas:(NSArray *)schemas statistics:(NSDictionary **)statistics error:(NSError **)error {
+ NSUInteger ContextBudget=[self budgetKiB]*1024;
  NSMutableArray *out=[NSMutableArray new];NSUInteger ordinal=0,argumentsOffloaded=0,resultsOffloaded=0,collapsed=0,assistantOffloaded=0;NSMutableDictionary *refs=[NSMutableDictionary new];NSMutableIndexSet *plainAssistants=[NSMutableIndexSet new];
  for(NSDictionary *m in messages){if(![m isKindOfClass:NSDictionary.class])continue;[out addObject:[WireMessage(m) mutableCopy]];if([m[@"role"] isEqual:@"assistant"]&&![m[@"tool_calls"] count])[plainAssistants addIndex:out.count-1];if(![m[@"role"] isEqual:@"system"]){refs[@(out.count-1)]=[NSString stringWithFormat:@"message:%lu",(unsigned long)ordinal];ordinal++;}}
  NSMutableDictionary *breakdown=[NSMutableDictionary new],*names=[NSMutableDictionary new];
@@ -132,7 +143,7 @@ static id Arguments(id value,NSString *ref,NSUInteger depth) {
  [out removeObjectsAtIndexes:removed];NSUInteger after=Measure(out,schemas);
  NSDictionary *composition=Composition(out,schemas);
  if(statistics)*statistics=@{@"beforeTextJSONBytes":@(before),@"afterTextJSONBytes":@(after),@"budgetBytes":@(ContextBudget),@"estimatedTextTokens":@((after+1)/2),@"estimateOnly":@YES,@"imageTokensIncluded":@NO,@"toolBreakdown":breakdown,@"afterCompositionBytes":composition,@"blockedBeforeRequest":@(after>ContextBudget),@"argumentCallsOffloaded":@(argumentsOffloaded),@"resultsOffloaded":@(resultsOffloaded),@"toolBatchesCollapsed":@(collapsed),@"assistantMessagesOffloaded":@(assistantOffloaded)};
- if(after>ContextBudget){if(error)*error=Failure([NSString stringWithFormat:@"本次未发送：历史工具与可回读的 AI 长回复整理后仍为 %.1f KiB，超过应用的 256 KiB 文本保护预算。用户要求、系统提示及工具定义不会被静默删掉。可查看“上下文用量”的整理后构成，精简大段输入或另开会话；完整记录保留。这不是模型报告的窗口已满。",after/1024.0]);return nil;}
+ if(after>ContextBudget){if(error)*error=Failure([NSString stringWithFormat:@"本次未发送：历史工具与可回读的 AI 长回复整理后仍为 %.1f KiB，超过应用的 %lu KiB 文本保护预算。用户要求、系统提示及工具定义不会被静默删掉。可查看“上下文用量”的整理后构成，精简大段输入或另开会话；完整记录保留。这不是模型报告的窗口已满。",after/1024.0,(unsigned long)(ContextBudget/1024)]);return nil;}
  return out;
 }
 @end
