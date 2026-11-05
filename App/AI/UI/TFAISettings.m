@@ -134,7 +134,7 @@ if(i.section==2){TFAITestResults *v=[[TFAITestResults alloc]initWithStyle:UITabl
  [self presentViewController:a animated:YES completion:nil];
 }
 - (void)contextBudgetMenu:(NSIndexPath *)index {
- UIAlertController *a=[UIAlertController alertControllerWithTitle:@"上下文保护大小" message:@"全局设置，从下一次请求生效。调大可保留更多历史，但可能增加消耗；服务商的模型窗口限制仍然生效。默认 256 KiB。" preferredStyle:UIAlertControllerStyleActionSheet];
+ UIAlertController *a=[UIAlertController alertControllerWithTitle:@"上下文保护大小" message:@"全局设置，从下一次请求生效。这是最终请求上限，旧历史会提前独立整理。调大可容纳更长输入或近期内容；服务商窗口限制仍生效。默认 256 KiB。" preferredStyle:UIAlertControllerStyleActionSheet];
  for(NSNumber *value in @[@128,@256,@512,@1024,@2048,@4096]){NSString *title=[NSString stringWithFormat:@"%@ KiB%@%@",value,value.unsignedIntegerValue==256?@"（默认）":@"",value.unsignedIntegerValue==TFAIContextProjection.budgetKiB?@" ✓":@""];[a addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){[TFAIContextProjection setBudgetKiB:value.unsignedIntegerValue];[self.tableView reloadData];}]];}
  [a addAction:[UIAlertAction actionWithTitle:@"自定义…" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){[self customContextBudget];}]];
  [a addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];a.popoverPresentationController.sourceView=[self.tableView cellForRowAtIndexPath:index];a.popoverPresentationController.sourceRect=[self.tableView cellForRowAtIndexPath:index].bounds;[self presentViewController:a animated:YES completion:nil];

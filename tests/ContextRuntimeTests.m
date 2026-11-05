@@ -2,6 +2,7 @@
 #import "AIRuntimeBudgetTests.m"
 #undef main
 int main(){@autoreleasepool{
+ id priorBudget=[NSUserDefaults.standardUserDefaults objectForKey:@"TFAIContextBudgetKiB"];[TFAIContextProjection setBudgetKiB:256];
  NSString *source=[@"// test source\n" stringByPaddingToLength:50000 withString:@"// test source\n" startingAtIndex:0];
  FixtureToolSchemas=@[@{@"name":@"propose_patch",@"parameters":@{@"type":@"object",@"properties":@{@"before":@{@"type":@"string"},@"after":@{@"type":@"string"}},@"required":@[@"before",@"after"],@"additionalProperties":@NO}}];
  [TFAIToolRegistry setEnabled:NO module:@"memory"];requests=executions=0;__block NSArray *saved=nil;__block NSDictionary *lastStats=nil;__block BOOL sawProjection=NO;
@@ -24,5 +25,12 @@ int main(){@autoreleasepool{
  BOOL foundOriginal=NO;for(NSDictionary *m in resumedSaved)if([m[@"content"] isEqual:longAnswer])foundOriginal=YES;Check(foundOriginal,@"runtime completion persists full unmodified assistant original");
  requests=0;FixtureTransport=^(NSArray *messages,NSArray *tools,TFAIEvent event){Check(NO,@"irreducible request must never enter transport");};
  runtime=TFAICreateRuntime(@"/tmp/fixture",@"fixture",nil);[runtime activateSession:@"blocked-fixture"];[runtime send:@[@{@"role":@"user",@"content":longAnswer}] session:@"blocked-fixture"];Check(requests==0,@"protected oversized user text blocked before any model request");
- FixtureTransport=nil;[TFAIToolRegistry setEnabled:YES module:@"memory"];NSLog(@"PASS context runtime regression");
+ [TFAIContextProjection setBudgetKiB:16384];requests=0;NSMutableArray *oldTools=[NSMutableArray arrayWithObject:@{@"role":@"user",@"content":@"Keep project and approvals"}];
+ for(NSUInteger n=0;n<120;n++){NSString *cid=[NSString stringWithFormat:@"old-%lu",(unsigned long)n];[oldTools addObject:@{@"role":@"assistant",@"content":@"Historical proposal",@"tool_calls":@[@{@"id":cid,@"name":@"propose_patch",@"arguments":@{@"before":@"old",@"after":@"new"}}]}];[oldTools addObject:@{@"role":@"tool",@"tool_call_id":cid,@"content":[@"Historical untrusted observation\n" stringByPaddingToLength:6000 withString:@"Historical untrusted observation\n" startingAtIndex:0]}];}
+ [oldTools addObject:@{@"role":@"assistant",@"content":@"Most recent concise conclusion"}];[oldTools addObject:@{@"role":@"user",@"content":@"Continue"}];NSData *oldToolsOriginal=[NSJSONSerialization dataWithJSONObject:oldTools options:NSJSONWritingSortedKeys error:nil];__block NSDictionary *softStats=nil;__block NSArray *softSaved=nil;
+ FixtureTransport=^(NSArray *messages,NSArray *tools,TFAIEvent event){event(@{@"type":@"text",@"text":@"Continued with lean history"});event(@{@"type":@"done"});};runtime=TFAICreateRuntime(@"/tmp/fixture",@"fixture",nil);runtime.event=^(NSDictionary *event){if([event[@"type"] isEqual:@"context_usage"])softStats=event[@"statistics"];if([event[@"type"] isEqual:@"done"])softSaved=event[@"messages"];};[runtime activateSession:@"proactive-fixture"];[runtime send:oldTools session:@"proactive-fixture"];
+ Check(requests==1&&[softStats[@"budgetBytes"] unsignedIntegerValue]==16384*1024&&[softStats[@"afterTextJSONBytes"] unsignedIntegerValue]<200*1024&&[softStats[@"proactiveToolBatchesCollapsed"] unsignedIntegerValue]>0,@"real runtime proactively compacts old modest results even with 16 MiB guard");
+ Check([oldToolsOriginal isEqual:[NSJSONSerialization dataWithJSONObject:oldTools options:NSJSONWritingSortedKeys error:nil]]&&softSaved.count>oldTools.count,@"runtime persists full original history while only transport uses compact copy");
+ [TFAIContextProjection setBudgetKiB:256];
+ FixtureTransport=nil;[TFAIToolRegistry setEnabled:YES module:@"memory"];if(priorBudget)[NSUserDefaults.standardUserDefaults setObject:priorBudget forKey:@"TFAIContextBudgetKiB"];else[NSUserDefaults.standardUserDefaults removeObjectForKey:@"TFAIContextBudgetKiB"];NSLog(@"PASS context runtime regression");
 }return 0;}
