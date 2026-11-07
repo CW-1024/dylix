@@ -66,6 +66,16 @@ class Fixture(BaseHTTPRequestHandler):
         if model in ['401','429','503']:self.reply({'error':{'message':'fixture private details should not escape'}},int(model));return
         if model=='redirect':
             self.send_response(307);self.send_header('Location','http://localhost:'+str(self.server.server_port)+'/must-not-arrive');self.send_header('Content-Length','0');self.end_headers();return
+        if model=='activity':
+            self.send_response(200);self.send_header('Content-Type','text/event-stream');self.send_header('Connection','close');self.end_headers()
+            def emit(value):
+                self.wfile.write(('data: '+json.dumps(value)+'\n\n').encode());self.wfile.flush()
+            emit({'choices':[{'index':0,'delta':{'reasoning_content':'Thinking'},'finish_reason':None}]})
+            for _ in range(9):
+                time.sleep(2);self.wfile.write(b': heartbeat\n\n');self.wfile.flush()
+            emit({'choices':[{'index':0,'delta':{'content':'OK'},'finish_reason':None}]})
+            emit({'choices':[{'index':0,'delta':{},'finish_reason':'stop'}]})
+            self.wfile.write(b'data: [DONE]\n\n');self.wfile.flush();self.close_connection=True;return
         if model=='slow':time.sleep(.8)
         stream=body.get('stream',False);tools=body.get('tools',[]);tool=bool(tools) and model!='no-tools'
         prompt=str(body)

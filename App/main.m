@@ -15,6 +15,7 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import "DebPackage.h"
 #import "PackageLinking.h"
+#import "DylibSignature.h"
 #import "OutputNaming.h"
 #import "ArchiveImport.h"
 #import "SDKResources.h"
@@ -767,7 +768,9 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         NSMutableDictionary *releaseIndexes=[NSMutableDictionary new];NSMutableArray *symbolProcessing=[NSMutableArray new];NSError *symbolError=nil;
         BOOL stripSymbols=TFShouldStripSymbols(config);
         if(toolSuccess&&stripSymbols){toolSuccess=TMCProcessReleaseSymbols(link,dylibName,packageScheme,build,input,log,releaseIndexes,symbolProcessing,&symbolError);if(!toolSuccess)[NSFileManager.defaultManager removeItemAtPath:[build stringByAppendingPathComponent:dylibName] error:nil];}
+        if(toolSuccess && !TMCValidateDylibSignature([NSData dataWithContentsOfFile:[build stringByAppendingPathComponent:dylibName]], &symbolError)) { toolSuccess=NO; TMCLog(log,"签名验证失败：%s\n",symbolError.localizedDescription.UTF8String); [NSFileManager.defaultManager removeItemAtPath:[build stringByAppendingPathComponent:dylibName] error:nil]; }
         NSMutableDictionary *report = [@{@"execution": @"embedded iOS frameworks", @"commands": results, @"logos":logosResults, @"sourceCount":@(projectSources.count), @"success":@NO, @"projectName":tweakName,@"packageScheme":packageScheme,@"cpuArchitecture":cpu,@"sdkVersion":sdkVersion,@"deploymentTarget":minimum} mutableCopy];
+        report[@"signatureVerified"]=@(toolSuccess);
         report[@"cachePolicy"]=self.checkpointCacheDirectory?@"clean_current_project_current_session":@"manual";report[@"stripSymbols"]=@(stripSymbols);report[@"symbolProcessing"]=symbolProcessing;if(symbolError)report[@"packageError"]=symbolError.localizedDescription;
         NSMutableArray *artifacts = [NSMutableArray arrayWithObject:dylibName];
         for (NSString *object in objects) [artifacts addObject:object.lastPathComponent];
@@ -796,12 +799,13 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
              TMCLog(log,"$ %s\n",[variantLink componentsJoinedByString:@" "].UTF8String);int status=runTool(variantLink,input,log);TMCLog(log,"exit=%d\n",status);[results addObject:@{@"command":[variantLink componentsJoinedByString:@" "],@"exit":@(status),@"stage":[@"link-" stringByAppendingString:scheme],@"source":@"all objects"}];if(status){allPassed=NO;report[@"packageError"]=[@"链接失败：" stringByAppendingString:scheme];break;}}
             if(![scheme isEqual:packageScheme]&&stripSymbols&&!TMCProcessReleaseSymbols(variantLink,variantDylib,scheme,build,input,log,releaseIndexes,symbolProcessing,&error)){allPassed=NO;report[@"packageError"]=error.localizedDescription?:@"发布裁剪失败";[NSFileManager.defaultManager removeItemAtPath:[build stringByAppendingPathComponent:variantDylib] error:nil];break;}
             NSData *dylib=[NSData dataWithContentsOfFile:[build stringByAppendingPathComponent:variantDylib]];
+            if (!TMCValidateDylibSignature(dylib, &error)) { allPassed=NO; report[@"packageError"]=error.localizedDescription; TMCLog(log,"签名验证失败：%s\n",error.localizedDescription.UTF8String); [NSFileManager.defaultManager removeItemAtPath:[build stringByAppendingPathComponent:variantDylib] error:nil]; break; }
             if ([scheme isEqual:@"roothide"] && !TMCNativeRootHideImage(dylib, &error)) { allPassed=NO; report[@"packageError"]=error.localizedDescription; TMCLog(log,"package error: %s\n",error.localizedDescription.UTF8String); break; }
             if(dylib&&[scheme isEqual:packageScheme])[namedArtifacts addObject:variantDylib];NSData *deb=nil;
             if(!customMetadata)deb=TMCDebPackageForProject(dylib,tweakName,@"com.example.target",scheme,projectDirectory,config,&error);
             else if(hasControl&&projectPlists.count==1){NSString *control=[NSString stringWithContentsOfFile:controlPath encoding:NSUTF8StringEncoding error:&error];NSData *filter=[NSData dataWithContentsOfFile:[projectDirectory stringByAppendingPathComponent:projectPlists.firstObject] options:0 error:&error];if(control&&filter){NSString *adjusted=TMCControlForScheme(control,scheme);deb=TMCDebPackageWithResources(dylib,tweakName,filter,adjusted,projectDirectory,scheme,config,&error);[adjusted writeToFile:[build stringByAppendingPathComponent:multipleSchemes?[@"control-" stringByAppendingString:scheme]:@"control"] atomically:YES encoding:NSUTF8StringEncoding error:nil];[filter writeToFile:[build stringByAppendingPathComponent:@"filter.plist"] atomically:YES];}}
             else error=[NSError errorWithDomain:@"Compiler" code:5 userInfo:@{NSLocalizedDescriptionKey:@"请在项目设置填写目标 Bundle ID，并保存 control 和过滤 plist 后构建。"}];
-            NSString *path=[build stringByAppendingPathComponent:variantDeb];BOOL success=deb&&[deb writeToFile:path options:NSDataWritingAtomic error:&error];[variantReports addObject:@{@"scheme":scheme,@"success":@(success),@"dylib":variantDylib,@"deb":variantDeb}];
+            NSString *path=[build stringByAppendingPathComponent:variantDeb];BOOL success=deb&&[deb writeToFile:path options:NSDataWritingAtomic error:&error];[variantReports addObject:@{@"scheme":scheme,@"success":@(success),@"dylib":variantDylib,@"deb":variantDeb,@"signatureVerified":@YES}];
             if(success){self.lastPackage=path;NSDictionary *entry=@{@"name":variantDeb,@"bytes":@(deb.length),@"scheme":scheme};[packages addObject:entry];[namedArtifacts addObject:variantDeb];TMCLog(log,"Debian package generated: %s (%lu bytes)\n",path.UTF8String,(unsigned long)deb.length);}
             else{allPassed=NO;report[@"packageError"]=error.localizedDescription?:@"打包失败";TMCLog(log,"package error: %s\n",[report[@"packageError"] UTF8String]);break;}
           }
@@ -830,7 +834,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         report[@"durationSeconds"]=@(NSProcessInfo.processInfo.systemUptime-startedUptime);
         TMCLog(log,"%s · %lu 个源码 · 耗时 %.2f 秒\n",[report[@"success"] boolValue]?"构建成功":"构建失败",(unsigned long)projectSources.count,[report[@"durationSeconds"] doubleValue]);
         for(NSString *artifact in namedArtifacts){NSDictionary *a=[NSFileManager.defaultManager attributesOfItemAtPath:[build stringByAppendingPathComponent:artifact] error:nil];TMCLog(log,"生成文件：%s · %s\n",artifact.UTF8String,[NSByteCountFormatter stringFromByteCount:a.fileSize countStyle:NSByteCountFormatterCountStyleFile].UTF8String);}
-        TMCLog(log,"签名状态：隐根变体带链接器 ad-hoc 签名；其他产物请按目标环境处理签名。\n");
+        TMCLog(log,"签名状态：所有成功导出的动态库均已通过 ad-hoc 签名页哈希验证；设备加载仍需目标环境实测。\n");
         NSData *json = [NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:nil];
         [json writeToFile:[build stringByAppendingPathComponent:@"report.json"] atomically:YES];
         fflush(log);
@@ -902,6 +906,8 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         self.window.rootViewController=TFAIRecovery110Regression();
     else if([NSProcessInfo.processInfo.arguments containsObject:@"--ai-attachments108-test"])
         self.window.rootViewController=TFAIAttachments108Regression();
+    else if([NSProcessInfo.processInfo.arguments containsObject:@"--ai-composer209-test"])
+        self.window.rootViewController=TFAIComposer209Regression();
     else if([NSProcessInfo.processInfo.arguments containsObject:@"--ai-v2-test"])
         self.window.rootViewController=TFAIV2Regression();
     else if([NSProcessInfo.processInfo.arguments containsObject:@"--ai-controls-visual-test"])

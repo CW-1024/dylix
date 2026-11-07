@@ -1,0 +1,131 @@
+{
+  "version": "1.1.0",
+  "build": 211,
+  "summaryBuildRange": [
+    202,
+    210
+  ],
+  "flexVersion": "1.0.1",
+  "packages": {
+    "private": {
+      "file": "Dylix-1.1.0-build211.ipa",
+      "bytes": 139992538,
+      "sha256": "2ba0522ded155a60918f1da1c7da8526cbf951b5bc895cceb8819befe6f8a0ad",
+      "signatureValid": true,
+      "zipValid": true,
+      "bundleVersions": {
+        "Info.plist": {
+          "version": "1.1.0",
+          "build": "211"
+        },
+        "PlugIns/TweakForgeShare.appex/Info.plist": {
+          "version": "1.1.0",
+          "build": "211"
+        },
+        "PlugIns/TweakForgeActivity.appex/Info.plist": {
+          "version": "1.1.0",
+          "build": "211"
+        },
+        "Frameworks/TFTaskActivity.framework/Info.plist": {
+          "version": "1.1.0",
+          "build": "211"
+        }
+      },
+      "binaries": {
+        "main": {
+          "sdk": "26.0",
+          "minimumOS": "15.0"
+        },
+        "share": {
+          "sdk": "26.0",
+          "minimumOS": "15.0"
+        },
+        "activity": {
+          "sdk": "18.2",
+          "minimumOS": "16.2"
+        }
+      },
+      "personasUnchangedAndBundled": true,
+      "flexManifestAndHashesVerified": true
+    },
+    "public": {
+      "file": "Dylix-1.1.0-build211-public.ipa",
+      "bytes": 139899010,
+      "sha256": "a1c30fb28289645cfa441dd7082e4c709ed09a52421210fdfb102184601ac4d9",
+      "signatureValid": true,
+      "zipValid": true,
+      "bundleVersions": {
+        "Info.plist": {
+          "version": "1.1.0",
+          "build": "211"
+        },
+        "PlugIns/TweakForgeShare.appex/Info.plist": {
+          "version": "1.1.0",
+          "build": "211"
+        },
+        "PlugIns/TweakForgeActivity.appex/Info.plist": {
+          "version": "1.1.0",
+          "build": "211"
+        },
+        "Frameworks/TFTaskActivity.framework/Info.plist": {
+          "version": "1.1.0",
+          "build": "211"
+        }
+      },
+      "binaries": {
+        "main": {
+          "sdk": "26.0",
+          "minimumOS": "15.0"
+        },
+        "share": {
+          "sdk": "26.0",
+          "minimumOS": "15.0"
+        },
+        "activity": {
+          "sdk": "18.2",
+          "minimumOS": "16.2"
+        }
+      },
+      "personasUnchangedAndBundled": true,
+      "flexManifestAndHashesVerified": true
+    }
+  },
+  "releaseChecks": {
+    "sdkSelection": 7,
+    "tokenFormatting": 20,
+    "streamActivity": 13,
+    "flexVisionRuntime": "passed; real JPEG/ImageIO, deterministic transport"
+  },
+  "inheritedBuild210Tests": {
+    "flexUIKitWithPersistenceAndDiagnostics": 130,
+    "transportLocalHTTP": 142,
+    "visionRuntime": "passed, ImageIO real JPEG decode + deterministic transport",
+    "contextRuntime": "passed",
+    "contextProjection": 121,
+    "sdkSelection": 7,
+    "visualQA": "expanded chat light/dark reviewed",
+    "flexConnectionVersion101": 122
+  },
+  "limitations": [
+    "No iOS 26 runtime/device visual acceptance test.",
+    "No target-app injection or external AI request in this release validation.",
+    "LiveActivity and FLEX use SDK18.2; main app and Share use SDK26.0.",
+    "Full native suite not rerun; focused regressions only."
+  ],
+  "flex": {
+    "version": "1.0.1",
+    "signatureValid": true,
+    "debDylibMatchesStandalone": true,
+    "scheme": "rootless",
+    "files": {
+      "dylib": {
+        "name": "FLEX++-1.0.1-arm64-rootless.dylib",
+        "sha256": "4c85193f16674f6178c5e1da8972c6073f06232fc848f5caee122e028bf7b078"
+      },
+      "deb": {
+        "name": "com.pxx917144686.flex_1.0.1_iphoneos-arm64.deb",
+        "sha256": "3bb07aa8c452940add7671b24662d88c517d63ef103c09935373972f348f5687"
+      }
+    }
+  }
+}

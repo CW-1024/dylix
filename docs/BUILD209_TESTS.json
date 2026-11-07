@@ -1,0 +1,214 @@
+{
+  "version": "1.0.9",
+  "build": 209,
+  "sdkSelectionChecks": 7,
+  "nativeLight": {
+    "passed": true,
+    "checks": [
+      {
+        "pass": true,
+        "name": "empty composer keeps compact minimum and no internal scrolling"
+      },
+      {
+        "pass": true,
+        "name": "six-line draft grows beyond the previous fixed two-line field"
+      },
+      {
+        "pass": true,
+        "name": "short multiline draft grows before enabling scrolling"
+      },
+      {
+        "pass": true,
+        "name": "soft-wrapped CJK text is measured at actual container width"
+      },
+      {
+        "pass": true,
+        "name": "long paste reaches bounded eight-line height then scrolls internally"
+      },
+      {
+        "pass": true,
+        "name": "measurement preserves content and selection"
+      },
+      {
+        "pass": true,
+        "name": "deleting long content shrinks input and disables internal scrolling"
+      },
+      {
+        "pass": true,
+        "name": "small portrait retains usable message area"
+      },
+      {
+        "pass": true,
+        "name": "landscape limits composer height to available screen"
+      },
+      {
+        "pass": true,
+        "name": "larger text remains legible without replacing the draft"
+      },
+      {
+        "pass": true,
+        "name": "chat-specific transparent navigation appearance has no color blur or shadow plate"
+      },
+      {
+        "pass": true,
+        "name": "older iOS keeps existing navigation appearance"
+      },
+      {
+        "pass": true,
+        "name": "older iOS retains existing material fallback"
+      },
+      {
+        "pass": true,
+        "name": "older iOS retains nonoverlapping composer layout"
+      },
+      {
+        "pass": true,
+        "name": "native insertText paste path grows input while editing"
+      },
+      {
+        "pass": true,
+        "name": "editing composer remains inside visible screen"
+      },
+      {
+        "pass": true,
+        "name": "native undo restores empty draft and compact height"
+      }
+    ],
+    "os": "18.3.1",
+    "inputFrame": "{{7, 10}, {410, 153}}",
+    "transparentBackground": "nil",
+    "keyboardHeight": 153,
+    "emptyHeight": 48,
+    "sixLineHeight": 153,
+    "keyboardVisible": 1,
+    "transparentShadow": "nil",
+    "composerFrame": "{{8, 390}, {424, 215}}"
+  },
+  "nativeDark": {
+    "passed": true,
+    "checks": [
+      {
+        "pass": true,
+        "name": "empty composer keeps compact minimum and no internal scrolling"
+      },
+      {
+        "pass": true,
+        "name": "six-line draft grows beyond the previous fixed two-line field"
+      },
+      {
+        "pass": true,
+        "name": "short multiline draft grows before enabling scrolling"
+      },
+      {
+        "pass": true,
+        "name": "soft-wrapped CJK text is measured at actual container width"
+      },
+      {
+        "pass": true,
+        "name": "long paste reaches bounded eight-line height then scrolls internally"
+      },
+      {
+        "pass": true,
+        "name": "measurement preserves content and selection"
+      },
+      {
+        "pass": true,
+        "name": "deleting long content shrinks input and disables internal scrolling"
+      },
+      {
+        "pass": true,
+        "name": "small portrait retains usable message area"
+      },
+      {
+        "pass": true,
+        "name": "landscape limits composer height to available screen"
+      },
+      {
+        "pass": true,
+        "name": "larger text remains legible without replacing the draft"
+      },
+      {
+        "pass": true,
+        "name": "chat-specific transparent navigation appearance has no color blur or shadow plate"
+      },
+      {
+        "pass": true,
+        "name": "older iOS keeps existing navigation appearance"
+      },
+      {
+        "pass": true,
+        "name": "older iOS retains existing material fallback"
+      },
+      {
+        "pass": true,
+        "name": "older iOS retains nonoverlapping composer layout"
+      },
+      {
+        "pass": true,
+        "name": "native insertText paste path grows input while editing"
+      },
+      {
+        "pass": true,
+        "name": "editing composer remains inside visible screen"
+      },
+      {
+        "pass": true,
+        "name": "native undo restores empty draft and compact height"
+      }
+    ],
+    "os": "18.3.1",
+    "inputFrame": "{{7, 10}, {410, 153}}",
+    "transparentBackground": "nil",
+    "keyboardHeight": 153,
+    "emptyHeight": 48,
+    "sixLineHeight": 153,
+    "keyboardVisible": 1,
+    "transparentShadow": "nil",
+    "composerFrame": "{{8, 390}, {424, 215}}"
+  },
+  "legacyRegression": {
+    "failedCount": 31,
+    "baselineFailedCount": 31,
+    "newFailedChecks": [],
+    "resolvedChecks": []
+  },
+  "limitations": [
+    "No iOS 26 runtime/device available; actual Liquid Glass rendering remains unverified.",
+    "LiveActivity framework/widget use installed SDK 18.2; main app and Share extension use SDK 26.0."
+  ],
+  "packages": {
+    "private": {
+      "version": "1.0.9",
+      "build": "209",
+      "binaries": {
+        "main": "/Users/xuegao/Downloads/ClassDump-com.phoenix.video😡-1792882659/workspaces/dylix-122/TheosMobileCompiler/build/device/TheosMobileCompiler.app/TheosMobileCompiler:\nLoad command 11\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform IOS\n    minos 15.0\n      sdk 26.0\n   ntools 1\n     tool LD\n  version 1115.7.3\n",
+        "share": "/Users/xuegao/Downloads/ClassDump-com.phoenix.video😡-1792882659/workspaces/dylix-122/TheosMobileCompiler/build/device/TheosMobileCompiler.app/PlugIns/TweakForgeShare.appex/TweakForgeShare:\nLoad command 11\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform IOS\n    minos 15.0\n      sdk 26.0\n   ntools 1\n     tool LD\n  version 1115.7.3\n",
+        "activity": "/Users/xuegao/Downloads/ClassDump-com.phoenix.video😡-1792882659/workspaces/dylix-122/TheosMobileCompiler/build/device/TheosMobileCompiler.app/PlugIns/TweakForgeActivity.appex/TweakForgeActivity:\nLoad command 11\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform IOS\n    minos 16.2\n      sdk 18.2\n   ntools 1\n     tool LD\n  version 1115.7.3\n"
+      },
+      "signatureValid": true,
+      "signatureOutput": "",
+      "zipValid": true,
+      "sha256": "0da3435aad4dc6f595f5ed8293e38b049c5868086125199306d254248d8a1e12",
+      "bytes": 139990420,
+      "sourcePersonaAndFlexResourcesUnchanged": true,
+      "packagedPersonaAndFlexResourcesMatch": true
+    },
+    "public": {
+      "version": "1.0.9",
+      "build": "209",
+      "binaries": {
+        "main": "/Users/xuegao/Downloads/ClassDump-com.phoenix.video😡-1792882659/deliverables/Dylix-OpenSource/source/build/device/TheosMobileCompiler.app/TheosMobileCompiler:\nLoad command 11\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform IOS\n    minos 15.0\n      sdk 26.0\n   ntools 1\n     tool LD\n  version 1115.7.3\n",
+        "share": "/Users/xuegao/Downloads/ClassDump-com.phoenix.video😡-1792882659/deliverables/Dylix-OpenSource/source/build/device/TheosMobileCompiler.app/PlugIns/TweakForgeShare.appex/TweakForgeShare:\nLoad command 11\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform IOS\n    minos 15.0\n      sdk 26.0\n   ntools 1\n     tool LD\n  version 1115.7.3\n",
+        "activity": "/Users/xuegao/Downloads/ClassDump-com.phoenix.video😡-1792882659/deliverables/Dylix-OpenSource/source/build/device/TheosMobileCompiler.app/PlugIns/TweakForgeActivity.appex/TweakForgeActivity:\nLoad command 11\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform IOS\n    minos 16.2\n      sdk 18.2\n   ntools 1\n     tool LD\n  version 1115.7.3\n"
+      },
+      "signatureValid": true,
+      "signatureOutput": "",
+      "zipValid": true,
+      "sha256": "b08857d9ca76c212e11125b8fc79ad6993dcc82e17935820e9915a8a6010ac05",
+      "bytes": 139895791,
+      "sourcePersonaAndFlexResourcesUnchanged": true,
+      "packagedPersonaAndFlexResourcesMatch": true
+    }
+  },
+  "syncedFilesMatchExceptIntentionalStudioVariant": true
+}

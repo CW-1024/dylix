@@ -94,7 +94,7 @@ int main(int argc,char **argv) { @autoreleasepool {
                  'pic', '-pic-level', '2', '-fobjc-runtime=ios-15.0', '-fobjc-arc',
                  '-fobjc-exceptions', '-fcxx-exceptions', '-fexceptions', '-std=gnu++17',
                  '-O2','-debug-info-kind=standalone','-dwarf-version=4'] + flags + ['-x', 'objective-c++', str(probe), '-o', str(obj)],
-                ['ld64.lld', '-install_name', '@rpath/Probe.dylib', '-dylib', '-arch', 'arm64', '-platform_version', 'ios-simulator',
+                ['ld64.lld', '-adhoc_codesign', '-install_name', '@rpath/Probe.dylib', '-dylib', '-arch', 'arm64', '-platform_version', 'ios-simulator',
                  '15.0', '18.2', '-syslibroot', sdk, '-lSystem', '-lobjc', '-lc++',
                  '-framework', 'Foundation', str(obj), '-o', str(dylib)],
             ]
@@ -104,7 +104,7 @@ int main(int argc,char **argv) { @autoreleasepool {
                 commands[0][commands[0].index('-o')+1]=str(dylib)
             command_file.write_text(json.dumps(commands))
             run('xcrun', 'simctl', 'spawn', 'booted', bundle / 'Tool', command_file)
-            run('codesign', '-f', '-s', '-', dylib)
+            run('codesign', '--verify', '--strict', dylib)
             processing=json.loads(pathlib.Path(str(dylib)+'.processing.json').read_text());assert processing[0]['savedBytes']>0;results[variant] = {'bytes':dylib.stat().st_size,'processing':processing}
             for mode in ([] if os.environ.get('DYLIX_FULL_LINK_COMMANDS') else ['objc', 'cpp']):
                 process = subprocess.run(['xcrun', 'simctl', 'spawn', 'booted', str(work / 'Runner'),

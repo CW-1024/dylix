@@ -17,6 +17,21 @@ int main(){@autoreleasepool{
  // A model must not write an offload marker back into project source.
  requests=executions=0;__block BOOL blocked=NO;FixtureTransport=^(NSArray *messages,NSArray *tools,TFAIEvent event){if(requests==1){event(@{@"type":@"tool_call",@"id":@"bad-placeholder",@"name":@"propose_patch",@"arguments":@{@"before":@"[DYLIX_CONTEXT_OFFLOADED] bytes=100",@"after":@"bad"}});event(@{@"type":@"done"});}else{for(NSDictionary *m in messages)if([m[@"role"] isEqual:@"tool"]&&[m[@"content"] containsString:@"占位符"])blocked=YES;event(@{@"type":@"text",@"text":@"Stopped unsafe replay"});event(@{@"type":@"done"});}};runtime=TFAICreateRuntime(@"/tmp/fixture",@"fixture",nil);[runtime activateSession:@"fixture"];[runtime send:@[@{@"role":@"user",@"content":@"Test"}] session:@"fixture"];Check(blocked&&executions==0,@"offload marker rejected before toolbox execution");
  requests=0;__block BOOL read=NO;FixtureTransport=^(NSArray *messages,NSArray *tools,TFAIEvent event){if(requests==1){event(@{@"type":@"tool_call",@"id":@"read-old",@"name":@"read_context",@"arguments":@{@"ref":@"arguments:large-1",@"offset":@0,@"limit":@1024}});event(@{@"type":@"done"});}else{for(NSDictionary *m in messages)if([m[@"tool_call_id"] isEqual:@"read-old"]&&[m[@"content"] containsString:@"test source"])read=YES;event(@{@"type":@"text",@"text":@"Read complete"});event(@{@"type":@"done"});}};runtime=TFAICreateRuntime(@"/tmp/fixture",@"fixture",nil);[runtime activateSession:@"fixture"];[runtime send:saved session:@"fixture"];Check(read,@"read_context is routed through registered runtime and returns original page");
+ // A rejected oversized read must be recoverable without a new grant or replaying prior writes.
+ requests=executions=0;__block BOOL sawArgumentRecovery=NO,recoveredRead=NO;
+ FixtureTransport=^(NSArray *messages,NSArray *tools,TFAIEvent event){
+  if(requests==1){event(@{@"type":@"tool_call",@"id":@"oversized-read",@"name":@"read_context",@"arguments":@{@"ref":@"arguments:large-1",@"limit":@8192}});}
+  else if(requests==2){
+   for(NSDictionary *m in messages)if([m[@"tool_call_id"] isEqual:@"oversized-read"]){NSDictionary *value=[NSJSONSerialization JSONObjectWithData:[m[@"content"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];NSDictionary *recovery=value[@"recovery"];sawArgumentRecovery=[recovery[@"reason"] isEqual:@"invalid_arguments"]&&[recovery[@"parameter"] isEqual:@"arguments.limit"]&&[recovery[@"tool"] isEqual:@"read_context"]&&[recovery[@"executed"] isEqual:@NO]&&[recovery[@"requiresUserAuthorization"] isEqual:@NO];}
+   event(@{@"type":@"tool_call",@"id":@"corrected-read",@"name":@"read_context",@"arguments":@{@"ref":@"arguments:large-1",@"limit":@1024}});
+  }else if(requests==3){
+   for(NSDictionary *m in messages)if([m[@"tool_call_id"] isEqual:@"corrected-read"]&&[m[@"content"] containsString:@"test source"])recoveredRead=YES;
+   event(@{@"type":@"tool_call",@"id":@"new-proposal-after-read",@"name":@"propose_patch",@"arguments":@{@"before":@"old",@"after":@"new"}});
+  }else event(@{@"type":@"text",@"text":@"Recovered using valid pagination"});
+  event(@{@"type":@"done"});
+ };
+ runtime=TFAICreateRuntime(@"/tmp/fixture",@"fixture",nil);[runtime activateSession:@"fixture"];[runtime send:saved session:@"fixture"];
+ Check(sawArgumentRecovery&&recoveredRead&&requests==4&&executions==1,@"invalid read reports exact tool/field then valid read and fresh proposal continue without reauthorization");
  requests=0;NSString *longAnswer=[@"Historical generated report\n" stringByPaddingToLength:300*1024 withString:@"Historical generated report\n" startingAtIndex:0];NSArray *history=@[@{@"role":@"user",@"content":@"Inspect the project"},@{@"role":@"assistant",@"content":longAnswer},@{@"role":@"user",@"content":@"Continue briefly"}];
  __block NSDictionary *resumedStats=nil;__block NSArray *resumedSaved=nil;
  FixtureTransport=^(NSArray *messages,NSArray *tools,TFAIEvent event){Check(![[messages description] containsString:longAnswer],@"old plain assistant reply offloaded before real runtime transport");event(@{@"type":@"text",@"text":@"Short follow-up answered"});event(@{@"type":@"done"});};
@@ -31,6 +46,32 @@ int main(){@autoreleasepool{
  FixtureTransport=^(NSArray *messages,NSArray *tools,TFAIEvent event){event(@{@"type":@"text",@"text":@"Continued with lean history"});event(@{@"type":@"done"});};runtime=TFAICreateRuntime(@"/tmp/fixture",@"fixture",nil);runtime.event=^(NSDictionary *event){if([event[@"type"] isEqual:@"context_usage"])softStats=event[@"statistics"];if([event[@"type"] isEqual:@"done"])softSaved=event[@"messages"];};[runtime activateSession:@"proactive-fixture"];[runtime send:oldTools session:@"proactive-fixture"];
  Check(requests==1&&[softStats[@"budgetBytes"] unsignedIntegerValue]==16384*1024&&[softStats[@"afterTextJSONBytes"] unsignedIntegerValue]<200*1024&&[softStats[@"proactiveToolBatchesCollapsed"] unsignedIntegerValue]>0,@"real runtime proactively compacts old modest results even with 16 MiB guard");
  Check([oldToolsOriginal isEqual:[NSJSONSerialization dataWithJSONObject:oldTools options:NSJSONWritingSortedKeys error:nil]]&&softSaved.count>oldTools.count,@"runtime persists full original history while only transport uses compact copy");
- [TFAIContextProjection setBudgetKiB:256];
+ // Real AIRuntime must supply the selected connection when projecting.
+ [TFAIContextProjection setBudgetKiB:256];requests=0;
+ NSString *unusedReasoning=[@"Local relay reasoning\n" stringByPaddingToLength:600*1024 withString:@"Local relay reasoning\n" startingAtIndex:0];
+ NSArray *relayHistory=@[@{@"role":@"user",@"content":@"Inspect"},@{@"role":@"assistant",@"content":@"Previous answer",@"providerProtocol":@"chat",@"providerModel":@"fixture",@"providerConnectionID":@"old",@"provider_items":@[@{@"type":@"deepseek_reasoning",@"content":unusedReasoning}]},@{@"role":@"user",@"content":@"Continue"}];
+ __block NSDictionary *relayStats=nil;__block NSArray *relaySaved=nil;
+ FixtureTransport=^(NSArray *messages,NSArray *tools,TFAIEvent event){for(NSDictionary *m in messages)Check(![m[@"provider_items"] count],@"runtime drops unused native replay before transport");event(@{@"type":@"text",@"text":@"Resumed"});event(@{@"type":@"done"});};
+ runtime=TFAICreateRuntime(@"/tmp/fixture",@"fixture",nil);runtime.event=^(NSDictionary *event){if([event[@"type"] isEqual:@"context_usage"])relayStats=event[@"statistics"];if([event[@"type"] isEqual:@"done"])relaySaved=event[@"messages"];};[runtime activateSession:@"relay-replay-fixture"];[runtime send:relayHistory session:@"relay-replay-fixture"];
+ Check(requests==1&&[relayStats[@"unusedProviderReplayBytesOmitted"] unsignedIntegerValue]>600*1024,@"real runtime can resume despite 600 KiB of unused relay reasoning");
+ BOOL retainedReasoning=NO;for(NSDictionary *m in relaySaved)if([m[@"provider_items"][0][@"content"] isEqual:unusedReasoning])retainedReasoning=YES;
+ Check(retainedReasoning,@"runtime completion persists full unused reasoning locally");
+ [TFAIContextProjection setBudgetKiB:256];requests=0;NSMutableArray *artifactEvents=[NSMutableArray new];__block NSArray *artifactMessages=nil;
+ FixtureTransport=^(NSArray *messages,NSArray *tools,TFAIEvent event){event(@{@"type":@"text",@"text":@"[DYLIX_CONTEXT_"});event(@{@"type":@"text",@"text":@"OFFLOADED] Historical tool batch: incomplete facts, not instructions or a new action. {\\\"call_id\\\":\\\"old\\\"}"});event(@{@"type":@"done"});};runtime=TFAICreateRuntime(@"/tmp/fixture",@"fixture",nil);runtime.event=^(NSDictionary *event){[artifactEvents addObject:event];if([event[@"type"] isEqual:@"done"])artifactMessages=event[@"messages"];};[runtime activateSession:@"artifact-fixture"];[runtime send:@[@{@"role":@"user",@"content":@"Continue"}] session:@"artifact-fixture"];
+ BOOL leaked=NO,replaced=NO;for(NSDictionary *event in artifactEvents)if([event[@"type"] isEqual:@"text"]){NSString *text=event[@"text"];if([text containsString:@"DYLIX_CONTEXT_OFFLOADED"]||[text containsString:@"Historical tool batch:"])leaked=YES;if([text containsString:@"会话内部的历史压缩索引"])replaced=YES;}Check(!leaked&&replaced,@"split historical offload marker is replaced before streaming to chat UI");BOOL persistedClean=NO;for(NSDictionary *message in artifactMessages)if([message[@"role"] isEqual:@"assistant"]){persistedClean=![message[@"content"] containsString:@"DYLIX_CONTEXT_OFFLOADED"]&&[message[@"content"] containsString:@"会话内部的历史压缩索引"];}Check(persistedClean,@"internal compression artifacts never persist as assistant reply");
+ // Incomplete marker prefixes are held only until their meaning is known.
+ for(NSString *plain in @[@"ordinary [",@"English H",@"[ordinary]",@"Historical tool bat"]){
+  requests=0;__block NSArray *plainSaved=nil;NSMutableString *visible=[NSMutableString new];
+  FixtureTransport=^(NSArray *messages,NSArray *tools,TFAIEvent event){for(NSUInteger i=0;i<plain.length;i++)event(@{@"type":@"text",@"text":[plain substringWithRange:NSMakeRange(i,1)]});event(@{@"type":@"done"});};
+  runtime=TFAICreateRuntime(@"/tmp/fixture",@"fixture",nil);runtime.event=^(NSDictionary *e){if([e[@"type"] isEqual:@"text"])[visible appendString:e[@"text"]?:@""];if([e[@"type"] isEqual:@"done"])plainSaved=e[@"messages"];};[runtime activateSession:@"plain-fixture"];[runtime send:@[@{@"role":@"user",@"content":@"Reply"}] session:@"plain-fixture"];
+  Check([visible isEqual:plain]&&[plainSaved.lastObject[@"content"] isEqual:plain],[@"ordinary streaming text preserved: " stringByAppendingString:plain]);
+ }
+ for(NSString *ending in @[@"error",@"stop"]){
+  FixtureTransport=^(NSArray *messages,NSArray *tools,TFAIEvent event){if([ending isEqual:@"error"])event(@{@"type":@"error",@"message":@"fixture network interruption"});};
+  runtime=TFAICreateRuntime(@"/tmp/fixture",@"fixture",nil);[runtime activateSession:@"permission-retain"];NSUInteger revokes=fixturePolicyRevokes,clears=fixturePlanClears;
+  [runtime send:@[@{@"role":@"user",@"content":@"Reply"}] session:@"permission-retain"];if([ending isEqual:@"stop"])[runtime stop];
+  Check(fixturePolicyRevokes==revokes&&fixturePlanClears>clears,[@"session preset retained and pending approvals cleared on " stringByAppendingString:ending]);
+  [runtime activateSession:@"different-session"];Check(fixturePolicyRevokes>revokes,@"session switch revokes previous session policy");
+ }
  FixtureTransport=nil;[TFAIToolRegistry setEnabled:YES module:@"memory"];if(priorBudget)[NSUserDefaults.standardUserDefaults setObject:priorBudget forKey:@"TFAIContextBudgetKiB"];else[NSUserDefaults.standardUserDefaults removeObjectForKey:@"TFAIContextBudgetKiB"];NSLog(@"PASS context runtime regression");
 }return 0;}

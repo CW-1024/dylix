@@ -6,7 +6,7 @@ int main(int argc, char **argv) { @autoreleasepool {
     NSArray *base = @[@"ld64.lld", @"-install_name", @"@rpath/Fixture.dylib", @"-rpath", @"/var/jb/Library/Frameworks", @"-F", @"/tmp/frameworks", @"-o", @"out.dylib"];
     NSArray *native = TMCPackageLinkArguments(base, @"roothide", @"/tmp/frameworks", @"Fixture");
     NSArray *normal = TMCPackageLinkArguments(native, @"rootless", @"/tmp/frameworks", @"Fixture");
-    if (![normal isEqual:base] || ![native containsObject:@"-adhoc_codesign"]) return 3;
+    if (![normal isEqual:[base arrayByAddingObject:@"-adhoc_codesign"]] || ![native containsObject:@"-adhoc_codesign"]) return 3;
     if (![TMCPackageLinkArguments(native, @"roothide", @"/tmp/frameworks", @"Fixture") isEqual:native]) return 4;
     NSData *signedImage = [NSData dataWithContentsOfFile:@(argv[1])];
     NSError *error = nil;

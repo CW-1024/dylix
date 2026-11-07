@@ -1,0 +1,181 @@
+{
+  "version": "1.0.9",
+  "build": 208,
+  "date": "2026-11-07",
+  "upstreamReference": {
+    "repo": "OpenMinis/OpenMinis",
+    "commit": "1a71df0f381cefde80bf912b723de6f9831bc177",
+    "file": "src/ios/Agent/Chat/AIChatViewModel+SSEStream.swift",
+    "implementation": "Independent Objective-C; no copied Swift or persona text"
+  },
+  "tests": [
+    {
+      "suite": "StreamActivityRun.py",
+      "checks": 13,
+      "passed": true
+    },
+    {
+      "suite": "run_permission_v4_policy.py",
+      "checks": 56,
+      "passed": true
+    },
+    {
+      "suite": "AIPolicyTests.m",
+      "checks": 42,
+      "passed": true
+    },
+    {
+      "suite": "ContextRuntimeRun.py",
+      "passed": true,
+      "coverage": [
+        "30 tool rounds",
+        "session scope retained after stop/error",
+        "pending approvals cleared",
+        "session switch revocation",
+        "split markers",
+        "ordinary streamed suffixes"
+      ]
+    },
+    {
+      "suite": "ContextProjectionRun.py",
+      "checks": 121,
+      "passed": true
+    },
+    {
+      "suite": "AITransportNetwork.py",
+      "checks": 139,
+      "passed": true,
+      "network": "Real localhost HTTP + NSURLSession; 18 seconds of SSE heartbeats between reasoning and reply; no API credentials"
+    },
+    {
+      "suite": "iOS18.3 native targeted UI checks",
+      "checks": 5,
+      "passed": true,
+      "details": [
+        {
+          "name": "live reasoning row reflects semantic activity rather than heartbeat",
+          "pass": true
+        },
+        {
+          "name": "native thinking header distinguishes receiving and waiting",
+          "pass": true
+        },
+        {
+          "name": "live reasoning row reflects semantic activity rather than heartbeat",
+          "pass": true
+        },
+        {
+          "name": "native thinking header distinguishes receiving and waiting",
+          "pass": true
+        },
+        {
+          "name": "reply phase does not leave reasoning card active",
+          "pass": true
+        }
+      ]
+    }
+  ],
+  "nativeFullSuite": {
+    "passed": false,
+    "existingFailedChecks": 31,
+    "baselineBuild": 207,
+    "baselineFailedChecks": 31,
+    "newFailures": [],
+    "failedCheckNames": [
+      "settings separates AI and About",
+      "typed selected job enables bounded header reader without project",
+      "ordinary: runtime schema boundary",
+      "ordinary: one core prompt without unrelated detailed manuals",
+      "ordinary request advertises only read-only guide and public research tools",
+      "ask: one core prompt without unrelated detailed manuals",
+      "ask advertises only read tools",
+      "develop: one core prompt without unrelated detailed manuals",
+      "attachment: one core prompt without unrelated detailed manuals",
+      "attachment: returned write rejected or normal text completed (此工具尚未注册。开发任务可先创建、克隆或选择项目，再使用返回的项目工具。)",
+      "ordinary attachment exposes reference reader plus public research",
+      "initial request sends manifest without snapshot or preview bodies",
+      "only requested line sent as tool result",
+      "classdump: one core prompt without unrelated detailed manuals",
+      "unselected job access rejected before reader",
+      "export: one core prompt without unrelated detailed manuals",
+      "recovery: one core prompt without unrelated detailed manuals",
+      "guide: one core prompt without unrelated detailed manuals",
+      "directory: one core prompt without unrelated detailed manuals",
+      "next model selected without stopping active run",
+      "model change resets effort without altering active run",
+      "external folder excluded; authorize folder only through internal project browser",
+      "runtime phase 0 mutation uses full grant",
+      "full automatic mutation phase 0 retains backup and undo",
+      "runtime phase 1 correct preview count",
+      "runtime phase 4 mutation uses full grant",
+      "full automatic mutation phase 4 retains backup and undo",
+      "full patch executes exact prepared proposal",
+      "full automatic mutation phase 5 retains backup and undo",
+      "first upload and changed branch ask approval; unchanged target auto-uploads",
+      "upload audit distinguishes target confirmation from session auto grant"
+    ],
+    "note": "Full legacy suite is not claimed green. Baseline rebuilt from pre-edit saved files and run on same simulator."
+  },
+  "builds": {
+    "private": {
+      "versions": [
+        {
+          "bundle": "TheosMobileCompiler.app",
+          "version": "1.0.9",
+          "build": "208"
+        },
+        {
+          "bundle": "TweakForgeActivity.appex",
+          "version": "1.0.9",
+          "build": "208"
+        },
+        {
+          "bundle": "TweakForgeShare.appex",
+          "version": "1.0.9",
+          "build": "208"
+        }
+      ],
+      "sourceResourcesUnchanged": true,
+      "packagedPersonasMatchSource": true,
+      "flexManifestFilesMatch": true,
+      "ipaIntegrity": true,
+      "signatureVerified": true,
+      "ipa": "Dylix-1.0.9-build208.ipa",
+      "sha256": "bf8d3c60ef0bf457207e57be1b04574ce8e862bccc7a9c3b5d414a3a5dc7248e"
+    },
+    "public": {
+      "versions": [
+        {
+          "bundle": "TheosMobileCompiler.app",
+          "version": "1.0.9",
+          "build": "208"
+        },
+        {
+          "bundle": "TweakForgeActivity.appex",
+          "version": "1.0.9",
+          "build": "208"
+        },
+        {
+          "bundle": "TweakForgeShare.appex",
+          "version": "1.0.9",
+          "build": "208"
+        }
+      ],
+      "sourceResourcesUnchanged": true,
+      "packagedPersonasMatchSource": true,
+      "flexManifestFilesMatch": true,
+      "ipaIntegrity": true,
+      "signatureVerified": true,
+      "ipa": "Dylix-1.0.9-build208-公开源码版.ipa",
+      "sha256": "29305ca915ea126c46638213fd26ee342a52e03e61b15cec1cc97ac59a8d26a8"
+    }
+  },
+  "limitations": [
+    "No real paid provider request",
+    "No validation on reporting user device",
+    "No claim of unlimited iOS background execution",
+    "15-second UI waiting threshold does not cancel or replay requests",
+    "Existing network resource/request timeouts remain",
+    "No migration of saved legacy artifact messages"
+  ]
+}

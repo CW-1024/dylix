@@ -14,12 +14,13 @@ static NSArray *TMCPackageLinkArguments(NSArray *original, NSString *scheme, NSS
     BOOL hidden = [scheme isEqual:@"roothide"];
     if (hidden) {
         NSUInteger at = [args indexOfObject:@"-F"];
+        if (at == NSNotFound) at = [args indexOfObject:@"-adhoc_codesign"];
         if (at == NSNotFound) at = args.count;
         [args insertObjects:@[@"-F", native, @"-L", native] atIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(at, 4)]];
-        if (![args containsObject:@"-adhoc_codesign"]) [args addObject:@"-adhoc_codesign"];
-    } else {
-        [args removeObject:@"-adhoc_codesign"];
     }
+    // All schemes and standalone dylibs need a code signature, not only RootHide.
+    [args removeObject:@"-no_adhoc_codesign"];
+    if (![args containsObject:@"-adhoc_codesign"]) [args addObject:@"-adhoc_codesign"];
     NSString *rpath = hidden ? @"@loader_path/.jbroot/Library/Frameworks" : [scheme isEqual:@"rootless"] ? @"/var/jb/Library/Frameworks" : @"/Library/Frameworks";
     NSUInteger index = [args indexOfObject:@"-rpath"];
     if (index != NSNotFound && index + 1 < args.count) args[index+1] = rpath;

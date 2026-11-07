@@ -1,0 +1,31 @@
+{
+  "version": "1.0.9",
+  "build": 207,
+  "date": "2026-11-06",
+  "tests": {
+    "contextRuntime": "passed",
+    "contextProjection": 121,
+    "deviceBuild": "passed",
+    "liveUserReproduction": "not available; fixed using reported shape"
+  },
+  "builds": {
+    "private": {
+      "file": "Dylix-1.0.9-build207-unsigned.ipa",
+      "bytes": 139983364,
+      "sha256": "42781acc736c526c6befa3a04160c39af72146df0c59a26ab2120d096cff6e83",
+      "zipIntegrity": "passed",
+      "codesignDeepStrict": "passed",
+      "bundleVersions": "passed",
+      "flexManifest": "passed"
+    },
+    "public": {
+      "file": "Dylix-1.0.9-build207-opensource-unsigned.ipa",
+      "bytes": 139883515,
+      "sha256": "1c3346db507196a11658a81bb22ec6366a1a4f9157656723ec4ed899e2bc6d9f",
+      "zipIntegrity": "passed",
+      "codesignDeepStrict": "passed",
+      "bundleVersions": "passed",
+      "flexManifest": "passed"
+    }
+  }
+}

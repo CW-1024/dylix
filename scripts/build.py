@@ -10,6 +10,7 @@ import zipfile
 import hashlib
 import gzip
 import json
+from build_sdk import select_sdk
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
@@ -22,6 +23,16 @@ args = parser.parse_args()
 platform = 'simulator' if args.simulator else 'device'
 sdk = 'iphonesimulator' if args.simulator else 'iphoneos'
 arch = 'x86_64' if args.simulator else 'arm64'
+installed_sdk = pathlib.Path(subprocess.check_output(['xcrun', '--sdk', sdk, '--show-sdk-path'], text=True).strip())
+bundled_sdk = pathlib.Path(os.environ.get('DYLIX_SDK_26_0', str(ROOT.parent / 'SDKDownloads/iOS-SDKs-26/iPhoneOS26.0.sdk')))
+try:
+    actual_sdk, sdk_settings = select_sdk(sdk, installed_sdk, bundled_sdk, args.sdk_root)
+except ValueError as error:
+    parser.error(str(error))
+if actual_sdk != installed_sdk.resolve():
+    args.sdk_root = actual_sdk
+sysroot = str(actual_sdk)
+
 app = ROOT / 'build' / platform / 'TheosMobileCompiler.app'
 if app.exists():
     shutil.rmtree(app)
@@ -48,8 +59,8 @@ commands = {name: [f'{framework}.framework/{framework}', 'main', '', 'no']
 # static archive for a fat executable and aborts with "Unknown header magic".
 # Keep the complete SDK losslessly compressed, and materialize it in app caches.
 for sdk_version, sdk_root, sdk_stem in [
-    ('16.4', pathlib.Path(os.environ.get('DYLIX_SDK_16_4', str(ROOT / 'Resources/SDK'))), 'SDK'),
-    ('26.0', pathlib.Path(os.environ.get('DYLIX_SDK_26_0', str(ROOT / 'LocalSDKs/iPhoneOS26.0.sdk'))), 'SDK26'),
+    ('16.4', ROOT / 'Resources/SDK', 'SDK'),
+    ('26.0', pathlib.Path(os.environ.get('DYLIX_SDK_26_0', str(ROOT.parent / 'SDKDownloads/iOS-SDKs-26/iPhoneOS26.0.sdk'))), 'SDK26'),
 ]:
     metadata = plistlib.loads((sdk_root / 'SDKSettings.plist').read_bytes())
     if metadata.get('Version') != sdk_version:
@@ -99,7 +110,7 @@ info = {
     'CFBundleExecutable': 'TheosMobileCompiler', 'CFBundleIdentifier': 'com.xuegao.theosmobilecompiler',
     'CFBundleName': 'Dylix', 'CFBundleDisplayName': 'Dylix',
     'CFBundleDevelopmentRegion': 'zh-Hans', 'CFBundleLocalizations': ['zh-Hans', 'en'],
-    'NSCameraUsageDescription': '拍摄照片作为您选择发送给模型的参考附件。', 'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': '1.0.9', 'CFBundleVersion': '201',
+    'NSCameraUsageDescription': '拍摄照片作为您选择发送给模型的参考附件。', 'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': '1.1.0', 'CFBundleVersion': '211',
     'CFBundleDocumentTypes': [{'CFBundleTypeName':'Dylix Files','CFBundleTypeRole':'Editor','LSHandlerRank':'Alternate','LSItemContentTypes':['public.data','public.archive','public.source-code']}],
     'CFBundleURLTypes': [{'CFBundleURLName':'Dylix Incoming','CFBundleURLSchemes':['dylix', 'tweakforge']}],
     'BGTaskSchedulerPermittedIdentifiers': ['com.xuegao.theosmobilecompiler.ai.processing'],
@@ -129,19 +140,12 @@ if asset_result.returncode:
     print('actool failed; reused unchanged Assets.car from the previous IPA', flush=True)
 info.update(plistlib.loads(icon_info.read_bytes()))
 (app / 'Info.plist').write_bytes(plistlib.dumps(info))
-sysroot = str(args.sdk_root.resolve()) if args.sdk_root else subprocess.check_output(['xcrun', '--sdk', sdk, '--show-sdk-path'], text=True).strip()
 if args.simulator:
     # Disposable ARM64 fixture is data only, used by offline AI tool regression.
     fixture = ROOT / 'build' / 'classdump-fixture.dylib'
     subprocess.run(['xcrun', '--sdk', 'iphoneos', 'clang', '-arch', 'arm64', '-miphoneos-version-min=15.0', '-fobjc-arc', '-dynamiclib', '-Wl,-no_objc_category_merging', '-framework', 'Foundation', str(ROOT / 'tests/TFClassDumpFixture.m'), '-o', str(fixture)], check=True)
     with zipfile.ZipFile(app / 'AIClassDumpFixture.ipa', 'w', zipfile.ZIP_DEFLATED) as archive:
         archive.write(fixture, 'Payload/Fixture.app/Fixture')
-settings_path = pathlib.Path(sysroot) / 'SDKSettings.json'
-if settings_path.exists():
-    import json
-    sdk_settings = json.loads(settings_path.read_text())
-else:
-    sdk_settings = plistlib.loads((pathlib.Path(sysroot) / 'SDKSettings.plist').read_bytes())
 sdk_version = sdk_settings['Version']
 if args.sdk_root and sdk not in sdk_settings.get('SupportedTargets', {}):
     parser.error('SDK platform does not match build target: ' + sdk)
@@ -198,9 +202,10 @@ share.mkdir(parents=True, exist_ok=True)
 share_info = {
  'CFBundleExecutable':'TweakForgeShare','CFBundleIdentifier':'com.xuegao.theosmobilecompiler.share',
  'CFBundleName':'TweakForgeShare','CFBundleDisplayName':'Dylix','CFBundlePackageType':'XPC!',
- 'CFBundleShortVersionString':'1.0.9','CFBundleVersion':info['CFBundleVersion'],
+ 'CFBundleShortVersionString':'1.1.0','CFBundleVersion':info['CFBundleVersion'],
  'MinimumOSVersion':'15.0','UIDeviceFamily':[1,2],
  'CFBundleSupportedPlatforms':info['CFBundleSupportedPlatforms'],
+ 'DTSDKName':info['DTSDKName'],'DTPlatformVersion':info['DTPlatformVersion'],
  'NSExtension':{'NSExtensionPointIdentifier':'com.apple.share-services',
  'NSExtensionPrincipalClass':'ShareViewController',
  'NSExtensionAttributes':{'NSExtensionActivationRule':{'NSExtensionActivationSupportsFileWithMaxCount':20}}},

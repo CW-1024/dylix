@@ -57,6 +57,6 @@ Build152：远程工作台轻量编辑器与文件预览复用已列出的highli
 
 ## FLEX 插件与现场工具
 
-- FLEX 上游 https://github.com/FLEXTool/FLEX ，BSD-3-Clause，原文保留于 Resources/ThirdPartyNotices/FLEX-LICENSE.txt；FLEX++ 修改及 Dylix 桥接对应源码随 1.0.8 Release 的 FLEX-1.0.0-source.zip 提供。
+- FLEX 上游 https://github.com/FLEXTool/FLEX ，BSD-3-Clause，原文保留于 Resources/ThirdPartyNotices/FLEX-LICENSE.txt；FLEX++ 修改及 Dylix 桥接的当前完整对应源码随 1.1.0 Release 的 FLEX-1.0.1-source.zip 提供；原 1.0.0 对应源码保留于 1.0.8 Release。
 - Capstone 相关许可保留于 Resources/ThirdPartyNotices/Capstone-LICENSE.txt，源文件头部声明继续保留。
 - 进程内触摸适配的 KIF / EarlGrey 来源及 Apache-2.0 原文见 FLEXTouch-NOTICE 和 FLEXTouch-DylixTouch-APACHE-2.0.txt。

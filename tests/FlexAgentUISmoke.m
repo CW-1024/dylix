@@ -382,6 +382,41 @@ static NSDictionary *Command(SmokeChat *chat, NSString *op, NSDictionary *args) 
  Check(Await(^{return chat.viewIfLoaded.window&&![[chat valueForKey:@"uiTransitioning"] boolValue];},4)&&[[chat valueForKey:@"jobID"] isEqual:@"job-fixture"]&&timer.valid,@"tapping capsule reopens retained chat without stopping task or reconnecting");
  result=Command(chat,@"restore_chat",@{});Check([result[@"result"][@"chatVisible"] boolValue]&&![result[@"result"][@"minimized"] boolValue],@"AI restores the same chat");
  Check(status.hidden,@"restored chat hides capsule without ending task");
+ UILabel *activity=[chat valueForKey:@"activityLabel"];
+ [chat updateTaskFromJob:@{@"events":@[@{@"sequence":@100,@"type":@"analysis_summary",@"text":@"fixture"}]}];
+ Check([activity.text containsString:@"思考"]&&status.hidden,@"expanded chat shows actual reasoning event without a floating overlay");
+ [chat updateTaskFromJob:@{@"events":@[@{@"sequence":@101,@"type":@"status",@"message":@"连接有数据，等待模型内容"}]}];
+ Check([activity.text containsString:@"等待模型内容"],@"expanded chat distinguishes heartbeat waiting from reasoning");
+ [chat updateTaskFromJob:@{@"events":@[@{@"sequence":@102,@"type":@"tool_started",@"id":@"read-test",@"name":@"flex_live_read",@"arguments":@{@"operation":@"view_tree"}}]}];
+ Check([activity.text containsString:@"读取视图树"],@"expanded chat shows the concrete live operation");
+ [chat updateTaskFromJob:@{@"events":@[@{@"sequence":@103,@"type":@"status",@"message":@"waiting"}]}];
+ Check([activity.text containsString:@"读取视图树"],@"transport status cannot overwrite an active tool operation");
+ [chat updateTaskFromJob:@{@"events":@[@{@"sequence":@104,@"type":@"tool_result",@"id":@"read-test"},@{@"sequence":@105,@"type":@"flex_capture_status",@"captureID":@"capture-test",@"stage":@"captured"}]}];
+ Check([activity.text containsString:@"截图已获取"]&&![activity.text containsString:@"已随请求发送"],@"capturing a screenshot never pretends it was uploaded");
+ [chat updateTaskFromJob:@{@"events":@[@{@"sequence":@106,@"type":@"flex_capture_status",@"captureID":@"capture-test",@"stage":@"sending"}]}];
+ Check([activity.text containsString:@"截图正在发送"],@"screenshot preparing request is separate from confirmed upload");
+ [chat updateTaskFromJob:@{@"events":@[@{@"sequence":@107,@"type":@"flex_capture_status",@"captureID":@"capture-test",@"stage":@"sent"},@{@"sequence":@108,@"type":@"text",@"text":@"fixture"}]}];
+ Check([activity.text containsString:@"截图已随请求发送"]&&[activity.text containsString:@"正在回复"],@"reply and confirmed screenshot upload are visible together");
+ [chat.view layoutIfNeeded];
+ Check(activity.numberOfLines==2&&activity.frame.size.height>=28,@"compact header gives task and screenshot status two readable lines");
+ for(NSNumber *dark in @[@NO,@YES]){
+  chat.overrideUserInterfaceStyle=dark.boolValue?UIUserInterfaceStyleDark:UIUserInterfaceStyleLight;[chat.view layoutIfNeeded];
+  UIView *chatSurface=chat.navigationController.view;[chatSurface layoutIfNeeded];UIGraphicsImageRenderer *renderer=[[UIGraphicsImageRenderer alloc]initWithSize:chatSurface.bounds.size];UIImage *preview=[renderer imageWithActions:^(UIGraphicsImageRendererContext *ctx){[chatSurface drawViewHierarchyInRect:chatSurface.bounds afterScreenUpdates:YES];}];
+  NSString *path=[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject stringByAppendingPathComponent:dark.boolValue?@"chat-status-dark.png":@"chat-status-light.png"];[UIImagePNGRepresentation(preview) writeToFile:path atomically:YES];
+ }
+ chat.overrideUserInterfaceStyle=UIUserInterfaceStyleUnspecified;
+
+ [chat updateTaskFromJob:@{@"events":@[@{@"sequence":@106,@"type":@"flex_capture_status",@"captureID":@"old-capture",@"stage":@"failed"}]}];
+ Check([activity.text containsString:@"截图已随请求发送"],@"replayed screenshot status cannot alter the current capture");
+ [chat updateTaskFromJob:@{@"events":@[@{@"sequence":@110,@"type":@"flex_capture_status",@"captureID":@"capture-test",@"stage":@"failed"}]}];
+ Check([activity.text containsString:@"截图请求失败"],@"model request failure remains visible after upload");
+ [chat updateTaskFromJob:@{@"events":@[],@"flexCaptureStatus":@{@"sequence":@120,@"captureID":@"missed-capture",@"stage":@"sent"}}];
+ Check([activity.text containsString:@"截图已随请求发送"],@"latest screenshot snapshot survives bounded event-history eviction");
+ [chat setValue:nil forKey:@"captureStatus"];
+ [chat updateTaskFromJob:@{@"events":@[@{@"sequence":@111,@"type":@"tool_started",@"id":@"gesture-expanded",@"name":@"flex_control",@"arguments":@{@"operation":@"gesture"}}]}];
+ Check([activity.text containsString:@"请勿触屏"]&&[activity.text containsString:@"操作页面"],@"expanded chat shows no-touch warning during real screen operations");
+ [chat updateTaskFromJob:@{@"events":@[@{@"sequence":@112,@"type":@"tool_result",@"id":@"gesture-expanded"}]}];
+
  result=Command(chat,@"gesture",@{@"kind":@"tap",@"x":@100,@"y":@300});Check([result[@"error"] length]>0,@"target gesture rejected while chat overlay is visible");
  Check([chat valueForKey:@"runtime"]==runtime&&[[chat valueForKey:@"sessionID"] isEqual:@"test-session"],@"restore keeps runtime and session identity");
  NSArray *catalog=[runtime execute:@"tool_catalog" arguments:@{} error:nil][@"tools"];Check(catalog.count==FLEXGlobalsRowCount+5,@"catalog enumerates globals and five named extensions");

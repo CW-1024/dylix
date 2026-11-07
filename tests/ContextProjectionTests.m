@@ -92,6 +92,47 @@ int main(){@autoreleasepool{
  [TFAIContextProjection project:field schemas:schemas statistics:&stats error:nil];report=[TFAIContextProjection usageReport:stats providerUsage:@{@"input_tokens":@123}];Check([report containsString:@"旧历史整理目标：64 KiB"]&&[report containsString:@"主动折叠旧工具批次"]&&[report containsString:@"16384 KiB"],@"diagnostic distinguishes soft target from hard guard and actual provider usage");
  [TFAIContextProjection setBudgetKiB:64];Check(![TFAIContextProjection project:blocked schemas:schemas statistics:nil error:nil],@"independent soft cleanup never bypasses the user's hard guard");
  printf("FIELD_SHAPE before=%lu after=%lu history=%lu hard=%lu\n",[under512Stats[@"beforeTextJSONBytes"] unsignedLongValue],[under512Stats[@"afterTextJSONBytes"] unsignedLongValue],[under512Stats[@"historyRetainedBytes"] unsignedLongValue],[under512Stats[@"budgetBytes"] unsignedLongValue]);
+ // Screenshot-shaped stress case: hundreds of per-call receipts plus plaintext
+ // reasoning stored by a generic Chat relay. This is synthetic, not user data.
+ [TFAIContextProjection setBudgetKiB:777];
+ NSDictionary *glm=@{@"id":@"relay-glm",@"protocol":@"chat",@"model":@"auto/glm-5.3-flash"};
+ NSMutableArray *reasoningLoop=[NSMutableArray arrayWithObjects:input[0],input[1],nil];
+ for(NSUInteger n=0;n<280;n++){
+  NSString *a=[NSString stringWithFormat:@"read-%04lu-00000000-1111-2222-333333333333",(unsigned long)n],*b=[a stringByAppendingString:@"-second"];
+  [reasoningLoop addObject:@{@"role":@"assistant",@"content":@"Inspect the current source before editing.",@"tool_calls":@[@{@"id":a,@"name":@"read_file",@"arguments":@{@"path":@"Tweak.xm",@"start_line":@(n*20)}},@{@"id":b,@"name":@"search_text",@"arguments":@{@"query":@"outputTextView"}}],@"providerProtocol":@"chat",@"providerModel":glm[@"model"],@"providerConnectionID":glm[@"id"],@"provider_items":@[@{@"type":@"deepseek_reasoning",@"content":Large(2200)}]}];
+  [reasoningLoop addObject:@{@"role":@"tool",@"tool_call_id":a,@"content":JSONString(@{@"path":@"Tweak.xm",@"text":Large(1400),@"success":@(n!=8),@"error":n==8?@"Fixture original not found; not applied":@""})}];
+  [reasoningLoop addObject:@{@"role":@"tool",@"tool_call_id":b,@"content":Large(900)}];
+ }
+ [reasoningLoop addObject:@{@"role":@"user",@"content":@"Continue from the latest source"}];
+ NSData *reasoningOriginal=Encoded(reasoningLoop);NSDictionary *conservativeStats=nil;
+ Check(![TFAIContextProjection project:reasoningLoop schemas:schemas statistics:&conservativeStats error:nil],@"reproduce protected raw Chat reasoning blocking a 777 KiB request");
+ out=[TFAIContextProjection project:reasoningLoop connection:glm schemas:schemas statistics:&stats error:nil];
+ Check(out&&[stats[@"afterTextJSONBytes"] unsignedIntegerValue]<160*1024&&[stats[@"historyRetainedBytes"] unsignedIntegerValue]<=64*1024,@"generic GLM Chat relay resumes with bounded receipt directories");
+ Check([stats[@"unusedProviderReplayBytesOmitted"] unsignedIntegerValue]>500*1024&&[stats[@"historyBatchesArchived"] unsignedIntegerValue]>0,@"exclude unused reasoning and compact receipt accumulation independently");
+ Check([reasoningOriginal isEqual:Encoded(reasoningLoop)],@"reasoning and full tool originals stay unchanged locally");Pairs(out);
+ Check([JSONString(out) containsString:@"Fixture original not found; not applied"],@"archive preserves selected actual failure instead of inventing success");
+ r=[TFAIContextProjection read:@{@"ref":@"message:1",@"limit":@1024} messages:reasoningLoop error:nil];Check([r[@"text"] isEqual:reasoningLoop[2][@"content"]],@"archive message ordinal resolves exact original assistant");
+ r=[TFAIContextProjection read:@{@"ref":@"result:read-0000-00000000-1111-2222-333333333333",@"limit":@1024} messages:reasoningLoop error:nil];Check(r!=nil,@"archived tool result remains addressable");
+ NSMutableArray *boundaries=[NSMutableArray arrayWithArray:[reasoningLoop subarrayWithRange:NSMakeRange(0,122)]];NSDictionary *intervening=@{@"role":@"user",@"content":@"Preserve this intervening instruction"};[boundaries addObject:intervening];[boundaries addObjectsFromArray:[reasoningLoop subarrayWithRange:NSMakeRange(122,reasoningLoop.count-122)]];
+ NSArray *bounded=[TFAIContextProjection project:boundaries connection:glm schemas:schemas statistics:nil error:nil];Check([bounded containsObject:intervening],@"archive cannot swallow intervening user instructions");
+ NSDictionary *smallReason=@{@"role":@"assistant",@"content":@"Answer",@"providerProtocol":@"deepseek",@"providerModel":@"deepseek-reasoner",@"providerConnectionID":@"ds",@"provider_items":@[@{@"type":@"deepseek_reasoning",@"content":@"Required current DeepSeek reasoning"}]};
+ NSDictionary *ds=@{@"protocol":@"deepseek",@"model":@"deepseek-reasoner",@"id":@"ds"};
+ NSArray *retained=[TFAIContextProjection project:@[smallReason] connection:ds schemas:schemas statistics:nil error:nil];Check([retained[0][@"provider_items"] isEqual:smallReason[@"provider_items"]],@"same DeepSeek connection retains required plaintext continuation");
+ retained=[TFAIContextProjection project:@[smallReason] connection:glm schemas:schemas statistics:nil error:nil];Check(!retained[0][@"provider_items"],@"model and connection switch omit unused provider continuation");
+ NSDictionary *responses=@{@"protocol":@"responses",@"model":@"fixture",@"id":@"fixture"};
+ retained=[TFAIContextProjection project:@[provider] connection:responses schemas:schemas statistics:nil error:nil];Check([retained[0][@"provider_items"][0][@"encrypted_content"] isEqual:@"opaque-original"],@"same Responses connection retains encrypted continuation unchanged");
+ report=[TFAIContextProjection usageReport:stats providerUsage:@{}];Check([report containsString:@"未用于当前连接的推理副本"]&&[report containsString:@"工具回执合并归档"],@"usage diagnostics explain unused replay and receipt archive");
+ printf("GLM_RECEIPT_SHAPE original=%lu conservative=%lu after=%lu history=%lu omittedReplay=%lu archived=%lu\n",[stats[@"beforeTextJSONBytes"] unsignedLongValue],[conservativeStats[@"afterTextJSONBytes"] unsignedLongValue],[stats[@"afterTextJSONBytes"] unsignedLongValue],[stats[@"historyRetainedBytes"] unsignedLongValue],[stats[@"unusedProviderReplayBytesOmitted"] unsignedLongValue],[stats[@"historyBatchesArchived"] unsignedLongValue]);
+ // Individually tiny tool batches may be cheaper than a per-call receipt.
+ // They still need an aggregate archive once their total exceeds the soft goal.
+ NSMutableArray *tiny=[NSMutableArray arrayWithObjects:input[0],input[1],nil];
+ for(NSUInteger n=0;n<500;n++){NSString *cid=[NSString stringWithFormat:@"tiny-%lu",(unsigned long)n];[tiny addObject:@{@"role":@"assistant",@"content":@"",@"tool_calls":@[@{@"id":cid,@"name":@"read_file",@"arguments":@{@"path":@"Tweak.xm"}}]}];[tiny addObject:@{@"role":@"tool",@"tool_call_id":cid,@"content":@"{\"ok\":true}"}];}
+ out=[TFAIContextProjection project:tiny connection:glm schemas:schemas statistics:&stats error:nil];
+ Check(out&&[stats[@"historyBatchesArchived"] unsignedIntegerValue]>0&&[stats[@"historyRetainedBytes"] unsignedIntegerValue]<=64*1024,@"many tiny batches archive even when individual receipt would grow the message");Pairs(out);
+ Check([TFAIContextProjection read:@{@"ref":@"result:tiny-0"} messages:tiny error:nil]!=nil,@"tiny archive retains exact original result access");
+ report=[TFAIContextProjection usageReport:@{@"beforeTextJSONBytes":@100,@"afterTextJSONBytes":@100,@"estimatedTextTokens":@398979} providerUsage:@{@"prompt_tokens":@1250000}];
+ Check([report containsString:@"1.25M"]&&[report containsString:@"398.98K"],@"actual and estimated token counts use shared decimal units");
+ Check([[TFAIContextProjection usageReport:@{@"beforeTextJSONBytes":@100,@"afterTextJSONBytes":@100} providerUsage:@{}] containsString:@"未报告"],@"missing usage is never formatted as zero tokens");
  if(previousBudget)[NSUserDefaults.standardUserDefaults setObject:previousBudget forKey:@"TFAIContextBudgetKiB"];else[NSUserDefaults.standardUserDefaults removeObjectForKey:@"TFAIContextBudgetKiB"];
  printf("PASS %lu context projection checks\n",checks);
 }return 0;}

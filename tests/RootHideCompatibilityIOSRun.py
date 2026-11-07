@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Exercise native RootHide linker paths/signatures with the actual embedded compiler."""
+"""Exercise all package schemes and standalone outputs with the actual embedded compiler."""
 import io, json, os, plistlib, struct, subprocess, tarfile, tempfile, time, hashlib, shutil
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-OUT=ROOT/'evidence/1.0.8-build193-roothide'
+OUT=ROOT/'evidence/1.0.9-build203-signing'
 DEVICE=os.environ.get('DYLIX_SIM_DEVICE','booted')
 APP='com.xuegao.theosmobilecompiler'
 def sim(*args):
@@ -38,12 +38,12 @@ sim('install',DEVICE,ROOT/'build/simulator/TheosMobileCompiler.app')
 doc=Path(sim('get_app_container',DEVICE,APP,'data'))/'Documents'
 OUT.mkdir(parents=True,exist_ok=True)
 results=[]
-for label,schemes,policy in [('multi-release',['rootless','rootful','roothide'],'auto'),('native-debug',['roothide'],'keep'),('native-library-alias',['roothide'],'auto')]:
+for label,schemes,policy in [('multi-release',['rootless','rootful','roothide'],'auto'),('multi-debug',['rootless','rootful','roothide'],'keep'),('native-library-alias',['roothide'],'auto'),('standalone-release',['rootless'],'auto'),('standalone-debug',['rootless'],'keep')]:
     with tempfile.TemporaryDirectory(prefix='dylix193-') as temp:
         project=Path(temp)
         # Resolves a real Substrate symbol. Nothing is hooked or executed by this test.
         (project/'Fixture.c').write_text('extern void MSHookFunction(void*,void*,void**);\nvoid link_fixture(void) { MSHookFunction((void*)0,(void*)0,(void**)0); }\n')
-        (project/'MobileCompiler.json').write_text(json.dumps(dict(name='RootHide linkage',productName='Fixture',sources=['Fixture.c'],package=True,exportDylib=True,packageSchemes=schemes,frameworks=[] if label=='native-library-alias' else ['CydiaSubstrate'],libraries=['substrate'] if label=='native-library-alias' else [],symbolPolicy=policy,optimization='release-speed')))
+        (project/'MobileCompiler.json').write_text(json.dumps(dict(name='RootHide linkage',productName='Fixture',sources=['Fixture.c'],package=not label.startswith('standalone'),exportDylib=True,packageSchemes=schemes,frameworks=[] if label=='native-library-alias' else ['CydiaSubstrate'],libraries=['substrate'] if label=='native-library-alias' else [],symbolPolicy=policy,optimization='release-speed')))
         (project/'control').write_text('Package: local.dylix.nativefixture\nName: NativeFixture\nVersion: 1.0.0\nArchitecture: iphoneos-arm64\nMaintainer: Test\nDescription: Isolated native RootHide linkage test\nDepends: mobilesubstrate, firmware (>= 15.0)\n')
         (project/'Fixture.plist').write_bytes(plistlib.dumps({'Filter':{'Bundles':['com.example.fixture']}}))
         before=set(doc.glob('Build-*'))
@@ -60,22 +60,34 @@ for label,schemes,policy in [('multi-release',['rootless','rootful','roothide'],
             if f.is_file() and f.suffix in ['.json','.log','.deb','.dylib']:shutil.copy2(f,dest/f.name)
         assert report['success'],report.get('packageError',report)
         assert report['stripSymbols']==(policy=='auto'),report
-        assert len(report['packages'])==len(schemes)
+        expected=0 if label.startswith('standalone') else len(schemes)
+        assert len(report['packages'])==expected
+        assert report['signatureVerified']
+        for relative in report['namedArtifacts']:
+            if relative.endswith('.dylib'):
+                check=subprocess.run(['codesign','--verify','--strict',str(build/relative)],capture_output=True,text=True)
+                assert check.returncode==0,check.stderr
+        for debug in (build/'DebugSymbols').glob('*'):
+            check=subprocess.run(['codesign','--verify','--strict',str(debug)],capture_output=True,text=True)
+            assert check.returncode==0,check.stderr
+        if not expected:
+            results.append(dict(label=label,scheme='rootless',standalone=True,codeSignatureVerified=True))
+            print('PASS',label,'standalone and debug copy signatures',flush=True)
         for package in report['packages']:
             path=dest/package['name'];control,image=unpack(path); info=macho(image)
             assert info['cpu']=='arm64' # Debian arm64e is not the Mach-O CPU ABI.
             assert 'Depends: mobilesubstrate, firmware (>= 15.0)' in control
+            assert report['signatureVerified'] and info['signature'],info
+            off,size=info['signature'];assert off+size<=len(image)
+            signed=dest/(package['scheme']+'-signed.dylib');signed.write_bytes(image)
+            check=subprocess.run(['codesign','--verify','--strict',str(signed)],capture_output=True,text=True)
+            assert check.returncode==0,check.stderr
+            info['codeSignatureVerified']=True
             if package['scheme']=='roothide':
                 assert 'Architecture: iphoneos-arm64e\n' in control
                 assert info['identifier']=='@loader_path/.jbroot/Library/MobileSubstrate/DynamicLibraries/Fixture.dylib',info
                 assert '@loader_path/.jbroot/usr/lib/libsubstrate.dylib' in info['dependencies'],info
                 assert all('/var/jb' not in p for p in info['dependencies']+info['rpaths'])
-                assert info['signature'],info
-                off,size=info['signature'];assert off+size<=len(image)
-                signed=dest/'native-signed.dylib';signed.write_bytes(image)
-                check=subprocess.run(['codesign','--verify','--strict',str(signed)],capture_output=True,text=True)
-                assert check.returncode==0,check.stderr
-                info['codeSignatureVerified']=True
             else:
                 assert '@rpath/CydiaSubstrate.framework/CydiaSubstrate' in info['dependencies'],info
                 assert not any('/.jbroot/' in p for p in info['dependencies']),info
@@ -87,4 +99,4 @@ for label,schemes,policy in [('multi-release',['rootless','rootful','roothide'],
             info.update(label=label,scheme=package['scheme'],file=package['name'],sha256=hashlib.sha256(path.read_bytes()).hexdigest())
             results.append(info);print('PASS',label,package['scheme'],info['dependencies'],flush=True)
 (OUT/'results.json').write_text(json.dumps(results,indent=2))
-print('PASS native RootHide actual compiler/linkage/signature regression')
+print('PASS all-scheme actual embedded compiler/linkage/signature regression')

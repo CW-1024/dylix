@@ -1,0 +1,127 @@
+--- a/FLEXDylixChatViewController.m
++++ b/FLEXDylixChatViewController.m
+@@ -55,8 +55,10 @@
+ @property NSMutableDictionary<NSString *,NSNumber *> *commandGenerations;
+ @property FLEXDylixStatusWindow *statusWindow;
+ @property NSString *taskPhase, *localOperation;
++@property NSString *idleStatus, *captureStatus, *captureID;
+ @property NSMutableDictionary<NSString *,NSString *> *activeToolOperations;
+ @property NSUInteger connectionState, lastEventSequence;
++@property NSUInteger lastCaptureSequence;
+ @property NSTimeInterval lastTaskUpdate;
+ @property BOOL waitingApproval;
+ @property BOOL statusSuspended;
+@@ -170,7 +172,7 @@
+  [self.connectButton setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+  self.contextLabel=[UILabel new];self.contextLabel.font=[UIFont systemFontOfSize:12 weight:UIFontWeightMedium];self.contextLabel.textColor=secondary;self.contextLabel.text=[@"FLEX 现场  ·  " stringByAppendingString:self.className];self.contextLabel.lineBreakMode=NSLineBreakByTruncatingMiddle;
+  self.activityLabel=[UILabel new];self.activityLabel.font=[UIFont systemFontOfSize:12];self.activityLabel.textColor=secondary;self.activityLabel.text=@"就绪";self.activityLabel.lineBreakMode=NSLineBreakByTruncatingTail;
+- self.activityLabel.textAlignment=NSTextAlignmentRight;
++ self.activityLabel.textAlignment=NSTextAlignmentRight;self.activityLabel.numberOfLines=2;self.activityLabel.accessibilityIdentifier=@"dylix.agent.activity";
+  UIStackView *selectors=[[UIStackView alloc]initWithArrangedSubviews:@[self.projectButton,self.modelButton,self.sessionButton]];selectors.axis=UILayoutConstraintAxisHorizontal;selectors.spacing=6;selectors.distribution=UIStackViewDistributionFillEqually;
+  for(UIButton *button in @[self.projectButton,self.modelButton,self.sessionButton]){button.titleLabel.lineBreakMode=NSLineBreakByTruncatingTail;button.contentEdgeInsets=UIEdgeInsetsMake(6,7,6,7);}
+  self.sessionButton.contentHorizontalAlignment=UIControlContentHorizontalAlignmentCenter;
+@@ -208,7 +210,7 @@
+  [self updateSessionButton];[self showConnectionState:self.csrf.length?1:0];
+  [self renderMessages];
+ }
+-- (void)setStatus:(NSString *)text {self.activityLabel.text=text;[self rememberConnection];[self refreshAgentStatus];}
++- (void)setStatus:(NSString *)text {self.idleStatus=text;[self rememberConnection];[self refreshAgentStatus];}
+ - (void)showConnectionState:(NSUInteger)state {
+  self.connectionState=state;
+  NSString *address=self.host.length?[NSString stringWithFormat:@"%@:%lu",self.host,(unsigned long)self.port]:@"Dylix";
+@@ -269,7 +271,7 @@
+ - (NSString *)draftKey {return [NSString stringWithFormat:@"%@/%@",self.projectID?:@"",self.sessionID?:@"new"];}
+ - (void)saveDraft {self.drafts[self.draftKey]=self.input.text?:@"";}
+ - (void)restoreDraft {self.input.text=self.drafts[self.draftKey]?:@"";[self textViewDidChange:self.input];}
+-- (void)newSession {if(self.restoringWorkspace){[self setStatus:@"正在恢复上次项目和会话，请稍候"];return;}if(self.busy)return;[self saveDraft];self.sessionLoadGeneration++;self.sessionID=nil;self.sessionTitle=nil;self.jobID=nil;self.liveMessage=nil;[self.messages removeAllObjects];[self addMessage:@"新会话已建立。当前 FLEX 对象会在发送时重新同步。" role:@"tip"];[self restoreDraft];[self updateSessionButton];[self setStatus:@"新会话就绪"];
++- (void)newSession {if(self.restoringWorkspace){[self setStatus:@"正在恢复上次项目和会话，请稍候"];return;}if(self.busy)return;[self saveDraft];self.sessionLoadGeneration++;self.sessionID=nil;self.sessionTitle=nil;self.jobID=nil;self.captureStatus=nil;self.captureID=nil;self.lastCaptureSequence=0;self.liveMessage=nil;[self.messages removeAllObjects];[self addMessage:@"新会话已建立。当前 FLEX 对象会在发送时重新同步。" role:@"tip"];[self restoreDraft];[self updateSessionButton];[self setStatus:@"新会话就绪"];
+ }
+ - (void)loadSessionID:(NSString *)identifier title:(NSString *)title {
+  if(self.busy)return;
+@@ -278,7 +280,7 @@
+   if(generation!=self.sessionLoadGeneration||![project isEqualToString:self.projectID])return;
+   if(error){[self showError:error];return;}
+   if(![record[@"id"] isEqualToString:identifier]){[self showError:DXChatError(@"会话读取结果不匹配")];return;}
+-  [self saveDraft];self.sessionID=identifier;self.sessionTitle=title.length?title:record[@"title"];self.liveMessage=nil;self.liveHasContent=NO;[self.messages removeAllObjects];
++  [self saveDraft];self.captureStatus=nil;self.captureID=nil;self.lastCaptureSequence=0;self.sessionID=identifier;self.sessionTitle=title.length?title:record[@"title"];self.liveMessage=nil;self.liveHasContent=NO;[self.messages removeAllObjects];
+   for(id raw in record[@"messages"]){if(![raw isKindOfClass:NSDictionary.class])continue;NSString *role=raw[@"role"];if(![@[@"user",@"assistant"] containsObject:role])continue;NSString *text=DXChatContent(raw[@"content"]);if(!text.length)continue;
+    if([role isEqualToString:@"user"]){NSRange old=[text rangeOfString:@"\n\n我的问题：" options:NSBackwardsSearch];if(old.location!=NSNotFound&&[text hasPrefix:@"当前 FLEX 现场："])text=[text substringFromIndex:NSMaxRange(old)];NSRange next=[text rangeOfString:@"\n\n当前 FLEX 现场："];if(next.location!=NSNotFound)text=[text substringToIndex:next.location];}
+    [self.messages addObject:[@{@"role":role,@"text":text} mutableCopy]];
+@@ -322,7 +324,7 @@
+ - (void)applicationStateChanged:(NSNotification *)note {self.statusSuspended=[note.name isEqual:UIApplicationWillResignActiveNotification];[self refreshAgentStatus];}
+ - (NSString *)phaseForOperation:(NSString *)operation {
+  NSDictionary *names=@{@"gesture":@"正在操作页面",@"activate_control":@"正在点击控件",@"scroll_view":@"正在滚动页面",@"set_view":@"正在调整视图",@"undo":@"正在恢复视图",@"input_text":@"正在输入文字",@"set_control_value":@"正在调整控件",@"capture_screen":@"正在截图观察",@"screen_elements":@"正在读取控件",@"view_tree":@"正在读取视图树",@"object_info":@"正在核对对象",@"class_info":@"正在核对类信息",@"class_header":@"正在读取头文件",@"minimize_chat":@"正在收起会话",@"restore_chat":@"正在恢复会话",@"open_tool":@"正在打开 FLEX 工具",@"select_row":@"正在操作 FLEX 页面",@"flex_scroll":@"正在滚动 FLEX 页面",@"set_search":@"正在搜索 FLEX 页面",@"navigate_back":@"正在返回 FLEX 页面",@"dismiss_tool":@"正在关闭 FLEX 页面",@"build_project":@"正在本机构建",@"read_file":@"正在读取项目文件",@"list_artifacts":@"正在检查构建产物",@"list_session_files":@"正在读取会话文件"};
+- return names[operation]?:@"正在执行工具";
++ return names[operation]?:[NSString stringWithFormat:@"正在执行工具 · %@",operation?:@"未知工具"];
+ }
+ - (BOOL)isScreenControl:(NSString *)operation {
+  return [@[@"gesture",@"activate_control",@"scroll_view",@"set_view",@"undo",@"input_text",@"set_control_value",@"open_tool",@"navigate_back",@"dismiss_tool",@"select_row",@"flex_scroll",@"set_search"] containsObject:operation];
+@@ -334,21 +336,32 @@
+   if(!self.statusWindow)self.statusWindow=[[FLEXDylixStatusWindow alloc]initWithFrame:UIScreen.mainScreen.bounds];
+   __weak typeof(self) weak=self;self.statusWindow.openChat=^{typeof(self) chat=weak;if(!chat||chat.uiTransitioning)return;chat.uiTransitioning=YES;[chat restoreChatWithCompletion:^{chat.uiTransitioning=NO;}];};
+  }
+- if(!show){self.statusWindow.hidden=YES;return;}
+  BOOL control=[self isScreenControl:self.localOperation];for(NSString *op in self.activeToolOperations.allValues)if([self isScreenControl:op])control=YES;
+  BOOL running=self.busy||self.localOperation.length||self.activeToolOperations.count;
+  NSString *title=@"Dylix AI · 已连接",*detail=@"轻点返回会话";UIColor *color=UIColor.systemGreenColor;
+  if(self.connectionState!=2){title=self.connectionState==3?@"Dylix AI · 连接中断":@"Dylix AI · 检查连接";detail=self.connectionState==3?@"轻点检查连接与任务":@"等待 Dylix 心跳确认";color=self.connectionState==3?UIColor.systemRedColor:UIColor.systemOrangeColor;}
+- else if(self.agentStopped){title=@"Dylix AI · 已停止";detail=self.activityLabel.text?:@"轻点返回会话";color=UIColor.systemGrayColor;}
++ else if(self.agentStopped){title=@"Dylix AI · 已停止";detail=self.idleStatus?:@"轻点返回会话";color=UIColor.systemGrayColor;}
+  else if(self.waitingApproval){title=@"AI 等待你的确认";detail=@"请查看当前确认弹窗";color=UIColor.systemOrangeColor;}
+  else if(running){title=control?@"AI 操作中 · 请勿触屏":@"Dylix AI · 处理中";color=control?UIColor.systemOrangeColor:UIColor.systemBlueColor;
+   NSString *phase=self.localOperation.length?[self phaseForOperation:self.localOperation]:(self.taskPhase?:@"等待模型响应");
+   NSTimeInterval elapsed=self.lastTaskUpdate>0?MAX(0,NSProcessInfo.processInfo.systemUptime-self.lastTaskUpdate):0;
+-  detail=elapsed>=15?[NSString stringWithFormat:@"等待更新 · %.0f 秒",elapsed]:phase;
++   detail=elapsed>=15?[NSString stringWithFormat:@"%@ · 等待更新 %.0f 秒",phase,elapsed]:phase;
+   if([phase isEqual:@"正在回复"]&&!control)title=@"Dylix AI · 正在回复";
+- }else if([self.activityLabel.text isEqual:@"请求未完成"]){title=@"Dylix AI · 任务未完成";detail=@"轻点查看错误详情";color=UIColor.systemOrangeColor;}
+- else if([self.activityLabel.text isEqual:@"回复完成"]){title=@"Dylix AI · 回复完成";detail=@"轻点查看回复";}
++ }else if([self.idleStatus isEqual:@"请求未完成"]){title=@"Dylix AI · 任务未完成";detail=@"请求未完成 · 查看错误详情";color=UIColor.systemOrangeColor;}
++ else if([self.idleStatus isEqual:@"回复完成"]){title=@"Dylix AI · 回复完成";detail=@"回复完成";}
++ else detail=self.idleStatus?:@"就绪";
++ if(control)detail=[@"请勿触屏 · " stringByAppendingString:detail];
++ if(self.captureStatus.length)detail=[detail stringByAppendingFormat:@"\n%@",self.captureStatus];
++ self.activityLabel.text=detail;self.activityLabel.textColor=color;self.activityLabel.accessibilityLabel=detail;
++ if(!show){self.statusWindow.hidden=YES;return;}
+  [self.statusWindow updateTitle:title detail:detail color:color busy:running&&self.connectionState==2&&!self.agentStopped&&!self.waitingApproval];self.statusWindow.hidden=NO;
++}
++- (void)updateCaptureStatus:(NSDictionary *)event {
++ if(![event isKindOfClass:NSDictionary.class])return;
++ NSUInteger sequence=[event[@"sequence"] unsignedIntegerValue];NSString *capture=event[@"captureID"],*stage=event[@"stage"];
++ NSDictionary *labels=@{@"captured":@"截图已获取 · 待发送",@"sending":@"截图正在发送",@"sent":@"截图已随请求发送",@"failed":@"截图请求失败",@"cancelled":@"截图请求已取消"};
++ if(sequence<=self.lastCaptureSequence||![capture isKindOfClass:NSString.class]||!capture.length||![stage isKindOfClass:NSString.class]||!labels[stage])return;
++ self.lastCaptureSequence=sequence;self.captureID=capture;self.captureStatus=labels[stage];
+ }
+ - (void)updateTaskFromJob:(NSDictionary *)job {
+  for(id raw in job[@"events"]){
+@@ -356,15 +369,18 @@
+   NSString *type=event[@"type"],*identifier=event[@"id"];
+   if([type isEqual:@"waiting_approval"]){self.waitingApproval=YES;self.taskPhase=@"等待操作确认";}
+   else if([type isEqual:@"tool_started"]){self.waitingApproval=NO;NSString *op=[event[@"arguments"] isKindOfClass:NSDictionary.class]?event[@"arguments"][@"operation"]:nil;op=op?:event[@"name"];if(identifier&&op)self.activeToolOperations[identifier]=op;self.taskPhase=[self phaseForOperation:op];}
+-  else if([type isEqual:@"tool_result"]){if(identifier)[self.activeToolOperations removeObjectForKey:identifier];self.waitingApproval=NO;self.taskPhase=@"工具已返回 · 等待模型";}
++  else if([type isEqual:@"tool_result"]){if(identifier)[self.activeToolOperations removeObjectForKey:identifier];self.waitingApproval=NO;self.taskPhase=self.activeToolOperations.count?[self phaseForOperation:self.activeToolOperations.allValues.firstObject]:@"工具已返回 · 等待模型";}
+   else if([type isEqual:@"assistant_start"]){[self.activeToolOperations removeAllObjects];self.waitingApproval=NO;self.taskPhase=@"等待模型响应";}
+-  else if([type isEqual:@"reasoning"]||[type isEqual:@"analysis_summary"]){self.taskPhase=@"模型正在处理";}
++  else if([type isEqual:@"reasoning"]||[type isEqual:@"analysis_summary"]){self.taskPhase=@"正在接收思考";}
+   else if([type isEqual:@"text"]){self.taskPhase=@"正在回复";}
++  else if([type isEqual:@"status"]){if(!self.activeToolOperations.count&&!self.localOperation.length&&[event[@"message"] isKindOfClass:NSString.class])self.taskPhase=[event[@"message"] substringToIndex:MIN((NSUInteger)120,[event[@"message"] length])];}
++  else if([type isEqual:@"flex_capture_status"]){[self updateCaptureStatus:event];}
++  else if([type isEqual:@"tool_progress"]){NSString *message=event[@"message"];if([message isKindOfClass:NSString.class]&&message.length)self.taskPhase=[message substringToIndex:MIN((NSUInteger)120,message.length)];}
+   else if([type isEqual:@"done"]){[self.activeToolOperations removeAllObjects];self.waitingApproval=NO;}
+   else if(![type isEqual:@"tool_progress"])continue;
+   self.lastTaskUpdate=NSProcessInfo.processInfo.systemUptime;
+  }
+- [self refreshAgentStatus];
++ [self updateCaptureStatus:job[@"flexCaptureStatus"]];[self refreshAgentStatus];
+ }
+ - (NSDictionary *)chatWindowStatus {
+  BOOL visible=self.viewIfLoaded.window!=nil&&!self.viewIfLoaded.window.hidden&&!self.navigationController.isBeingDismissed;
+@@ -645,7 +661,7 @@
+    self.sessionID=sid;self.sessionTitle=record[@"title"];[self rememberConnection];[self updateSessionButton];[self sendTapped];
+   }];return;
+  }
+- self.agentStopped=NO;self.lastEventSequence=0;[self.activeToolOperations removeAllObjects];self.waitingApproval=NO;self.taskPhase=@"正在同步现场";self.lastTaskUpdate=NSProcessInfo.processInfo.systemUptime;
++ self.agentStopped=NO;self.lastEventSequence=0;self.captureStatus=nil;self.captureID=nil;self.lastCaptureSequence=0;[self.activeToolOperations removeAllObjects];self.waitingApproval=NO;self.taskPhase=@"正在同步现场";self.lastTaskUpdate=NSProcessInfo.processInfo.systemUptime;
+  NSUInteger generation=self.agentGeneration;
+  self.busy=YES;self.input.text=@"";[self textViewDidChange:self.input];[self.input resignFirstResponder];[self addMessage:question role:@"user"];[self addMessage:@"" role:@"assistant"];self.liveHasContent=NO;[self setStatus:@"正在同步 FLEX 现场…"];
+  NSString *bundle=NSBundle.mainBundle.bundleIdentifier?:@"unknown";NSString *current=self.reportProvider?self.reportProvider():self.report;

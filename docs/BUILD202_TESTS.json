@@ -1,0 +1,100 @@
+{
+  "version": "1.0.9",
+  "build": 202,
+  "date": "2026-11-05",
+  "tests": {
+    "newPreflightDiagnostics": {
+      "passed": 38
+    },
+    "existingRegistry": {
+      "passed": 174
+    },
+    "contextProjection": {
+      "passed": 103
+    },
+    "runtimeRecovery": {
+      "passed": true,
+      "transport": "deterministic fixture; production AIRuntime included",
+      "sequence": [
+        "invalid read_context limit=8192",
+        "structured invalid_arguments / arguments.limit",
+        "valid read_context limit=1024",
+        "fresh propose_patch"
+      ]
+    }
+  },
+  "limitations": [
+    "Screenshot does not include original failing arguments; exact user parameter is unknown.",
+    "No live provider or target-app task was executed."
+  ],
+  "builds": {
+    "private": {
+      "bytes": 139968394,
+      "sha256": "d261511b76b3c0c5876c8c61b7044886626d14994fcebafc76ed3dd9911c9546",
+      "zipIntegrity": "passed",
+      "codesignDeepStrict": "passed",
+      "bundleIdentifiers": {
+        "Info.plist": {
+          "version": "1.0.9",
+          "build": "202",
+          "minimumOS": "15.0",
+          "sdk": "iphoneos18.2"
+        },
+        "PlugIns/TweakForgeShare.appex/Info.plist": {
+          "version": "1.0.9",
+          "build": "202",
+          "minimumOS": "15.0",
+          "sdk": null
+        },
+        "PlugIns/TweakForgeActivity.appex/Info.plist": {
+          "version": "1.0.9",
+          "build": "202",
+          "minimumOS": "16.2",
+          "sdk": null
+        },
+        "Frameworks/TFTaskActivity.framework/Info.plist": {
+          "version": "1.0.9",
+          "build": "202",
+          "minimumOS": "16.2",
+          "sdk": null
+        }
+      },
+      "personasUnchanged": true,
+      "bundledFlexManifest": "passed"
+    },
+    "public": {
+      "bytes": 139872045,
+      "sha256": "e331ea00eab45bf25d2cfe78f237d5ab2c864a3f4b033f5b3374f48cae542e64",
+      "zipIntegrity": "passed",
+      "codesignDeepStrict": "passed",
+      "bundleIdentifiers": {
+        "Info.plist": {
+          "version": "1.0.9",
+          "build": "202",
+          "minimumOS": "15.0",
+          "sdk": "iphoneos26.0"
+        },
+        "PlugIns/TweakForgeShare.appex/Info.plist": {
+          "version": "1.0.9",
+          "build": "202",
+          "minimumOS": "15.0",
+          "sdk": null
+        },
+        "PlugIns/TweakForgeActivity.appex/Info.plist": {
+          "version": "1.0.9",
+          "build": "202",
+          "minimumOS": "16.2",
+          "sdk": null
+        },
+        "Frameworks/TFTaskActivity.framework/Info.plist": {
+          "version": "1.0.9",
+          "build": "202",
+          "minimumOS": "16.2",
+          "sdk": null
+        }
+      },
+      "personasUnchanged": true,
+      "bundledFlexManifest": "passed"
+    }
+  }
+}

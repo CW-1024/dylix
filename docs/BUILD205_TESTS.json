@@ -1,0 +1,33 @@
+{
+  "version": "1.0.9",
+  "build": 205,
+  "date": "2026-11-05",
+  "tests": {
+    "tokenFormattingChecks": 20,
+    "usageChecks": 28,
+    "contextProjectionChecks": 121,
+    "dataSemantics": "display only; raw counters unchanged"
+  },
+  "builds": {
+    "private": {
+      "file": "Dylix-1.0.9-build205-unsigned.ipa",
+      "bytes": 139979329,
+      "sha256": "90c73fb79d13c2fc1a5b7ba9ab00974d807809bc7c219cfd8c8e449edcbe0401",
+      "zipIntegrity": "passed",
+      "codesignDeepStrict": "passed",
+      "bundleVersions": "passed",
+      "personasUnchanged": true,
+      "flexManifest": "passed"
+    },
+    "public": {
+      "file": "Dylix-1.0.9-build205-opensource-unsigned.ipa",
+      "bytes": 139878821,
+      "sha256": "dbf823be5fef6064123729148bd5cc1b1fe7c6026b7bd853a35b97da8796ee97",
+      "zipIntegrity": "passed",
+      "codesignDeepStrict": "passed",
+      "bundleVersions": "passed",
+      "personasUnchanged": true,
+      "flexManifest": "passed"
+    }
+  }
+}

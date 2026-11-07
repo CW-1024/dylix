@@ -1,0 +1,60 @@
+{
+  "version": "1.0.9",
+  "build": 210,
+  "tests": {
+    "flexUIKitWithPersistenceAndDiagnostics": 130,
+    "transportLocalHTTP": 142,
+    "visionRuntime": "passed, ImageIO real JPEG decode + deterministic transport",
+    "contextRuntime": "passed",
+    "contextProjection": 121,
+    "sdkSelection": 7,
+    "visualQA": "expanded chat light/dark reviewed",
+    "flexConnectionVersion101": 122
+  },
+  "limitations": [
+    "No target-app injection or real external AI request tested in this turn.",
+    "No iOS 26 runtime/device visual test.",
+    "LiveActivity SDK 18.2, main app and Share SDK 26.0.",
+    "Full native suite not rerun; targeted changed-area regressions passed."
+  ],
+  "packages": {
+    "private": {
+      "binaries": {
+        "main": "/Users/xuegao/Downloads/ClassDump-com.phoenix.video😡-1792882659/workspaces/dylix-122/TheosMobileCompiler/build/device/TheosMobileCompiler.app/TheosMobileCompiler:\nLoad command 11\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform IOS\n    minos 15.0\n      sdk 26.0\n   ntools 1\n     tool LD\n  version 1115.7.3\n",
+        "share": "/Users/xuegao/Downloads/ClassDump-com.phoenix.video😡-1792882659/workspaces/dylix-122/TheosMobileCompiler/build/device/TheosMobileCompiler.app/PlugIns/TweakForgeShare.appex/TweakForgeShare:\nLoad command 11\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform IOS\n    minos 15.0\n      sdk 26.0\n   ntools 1\n     tool LD\n  version 1115.7.3\n",
+        "activity": "/Users/xuegao/Downloads/ClassDump-com.phoenix.video😡-1792882659/workspaces/dylix-122/TheosMobileCompiler/build/device/TheosMobileCompiler.app/PlugIns/TweakForgeActivity.appex/TweakForgeActivity:\nLoad command 11\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform IOS\n    minos 16.2\n      sdk 18.2\n   ntools 1\n     tool LD\n  version 1115.7.3\n"
+      },
+      "signatureValid": true,
+      "zipValid": true,
+      "sha256": "f847da23b8738bc6f8ebc58d5999cc7721ec59c15b7e436f0a9553860cb2c7e2",
+      "bytes": 139992538,
+      "personasAndUnrelatedResourcesUnchanged": true,
+      "bundledFlexManifestAndPersonasMatch": true,
+      "mainCodeSectionsUnchanged": true
+    },
+    "public": {
+      "binaries": {
+        "main": "/Users/xuegao/Downloads/ClassDump-com.phoenix.video😡-1792882659/deliverables/Dylix-OpenSource/source/build/device/TheosMobileCompiler.app/TheosMobileCompiler:\nLoad command 11\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform IOS\n    minos 15.0\n      sdk 26.0\n   ntools 1\n     tool LD\n  version 1115.7.3\n",
+        "share": "/Users/xuegao/Downloads/ClassDump-com.phoenix.video😡-1792882659/deliverables/Dylix-OpenSource/source/build/device/TheosMobileCompiler.app/PlugIns/TweakForgeShare.appex/TweakForgeShare:\nLoad command 11\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform IOS\n    minos 15.0\n      sdk 26.0\n   ntools 1\n     tool LD\n  version 1115.7.3\n",
+        "activity": "/Users/xuegao/Downloads/ClassDump-com.phoenix.video😡-1792882659/deliverables/Dylix-OpenSource/source/build/device/TheosMobileCompiler.app/PlugIns/TweakForgeActivity.appex/TweakForgeActivity:\nLoad command 11\n      cmd LC_BUILD_VERSION\n  cmdsize 32\n platform IOS\n    minos 16.2\n      sdk 18.2\n   ntools 1\n     tool LD\n  version 1115.7.3\n"
+      },
+      "signatureValid": true,
+      "zipValid": true,
+      "sha256": "9c452303acd10805c73c000dc2b26835bdcb9af6efb78f0069cdb6b9fd27ee2d",
+      "bytes": 139899029,
+      "personasAndUnrelatedResourcesUnchanged": true,
+      "bundledFlexManifestAndPersonasMatch": true,
+      "mainCodeSectionsUnchanged": true
+    }
+  },
+  "flex": {
+    "version": "1.0.1",
+    "bundleBuild": 210,
+    "debSHA256": "3bb07aa8c452940add7671b24662d88c517d63ef103c09935373972f348f5687",
+    "dylibSHA256": "4c85193f16674f6178c5e1da8972c6073f06232fc848f5caee122e028bf7b078",
+    "signatureValid": true,
+    "debDylibMatchesStandalone": true,
+    "packageScheme": "rootless",
+    "sdk": "18.2 (unchanged plugin toolchain)"
+  }
+}

@@ -1,0 +1,221 @@
+{
+  "version": "1.0.9",
+  "build": 203,
+  "date": "2026-11-05",
+  "tests": {
+    "signatureUnitChecks": 156,
+    "nativeCompilerCases": 9,
+    "packageCases": 7,
+    "standaloneCases": 2,
+    "packageLinkingRegression": "passed",
+    "releaseSymbolRegression": {
+      "objcCatchResult": 42,
+      "cppCatchResult": 42,
+      "hostResigningOfPluginOutput": false
+    },
+    "deviceLoadTest": "not performed; requires rebuilding original project and testing on Dopamine",
+    "deploymentTarget": "iOS 15; simulator tests on iOS 18.3"
+  },
+  "builds": {
+    "private": {
+      "file": "Dylix-1.0.9-build203-unsigned.ipa",
+      "bytes": 139969910,
+      "sha256": "007ba129adb44437c9af64147fe8fb13323ef78090bd92b420faa3002b160183",
+      "zipIntegrity": "passed",
+      "codesignDeepStrict": "passed",
+      "personasUnchanged": true,
+      "flexManifest": "passed"
+    },
+    "public": {
+      "file": "Dylix-1.0.9-build203-opensource-unsigned.ipa",
+      "bytes": 139873512,
+      "sha256": "8ebc524962801b42477f436e9bc5d401b41896c0dadb269437a61031decb0ded",
+      "zipIntegrity": "passed",
+      "codesignDeepStrict": "passed",
+      "personasUnchanged": true,
+      "flexManifest": "passed"
+    }
+  },
+  "nativeResults": [
+    {
+      "cpu": "arm64",
+      "identifier": "@rpath/Fixture.dylib",
+      "dependencies": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libobjc.A.dylib",
+        "/usr/lib/libc++.1.dylib",
+        "/System/Library/Frameworks/Foundation.framework/Foundation",
+        "/System/Library/Frameworks/UIKit.framework/UIKit",
+        "@rpath/CydiaSubstrate.framework/CydiaSubstrate"
+      ],
+      "rpaths": [
+        "/var/jb/Library/Frameworks"
+      ],
+      "signature": [
+        65776,
+        688
+      ],
+      "codeSignatureVerified": true,
+      "label": "multi-release",
+      "scheme": "rootless",
+      "file": "NativeFixture_1.0.0_iphoneos-arm64.deb",
+      "sha256": "38b5b200d673aaa5de7761ab126b50ac4b57f6c6c0fc4fcea2f3846382560ae8"
+    },
+    {
+      "cpu": "arm64",
+      "identifier": "@rpath/Fixture.dylib",
+      "dependencies": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libobjc.A.dylib",
+        "/usr/lib/libc++.1.dylib",
+        "/System/Library/Frameworks/Foundation.framework/Foundation",
+        "/System/Library/Frameworks/UIKit.framework/UIKit",
+        "@rpath/CydiaSubstrate.framework/CydiaSubstrate"
+      ],
+      "rpaths": [
+        "/Library/Frameworks"
+      ],
+      "signature": [
+        65776,
+        688
+      ],
+      "codeSignatureVerified": true,
+      "label": "multi-release",
+      "scheme": "rootful",
+      "file": "NativeFixture_1.0.0_iphoneos-arm.deb",
+      "sha256": "43fa334cb031c2dc11c257c17aad7eac8cd9eec423dd090a5adca726d7de5c06"
+    },
+    {
+      "cpu": "arm64",
+      "identifier": "@loader_path/.jbroot/Library/MobileSubstrate/DynamicLibraries/Fixture.dylib",
+      "dependencies": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libobjc.A.dylib",
+        "/usr/lib/libc++.1.dylib",
+        "/System/Library/Frameworks/Foundation.framework/Foundation",
+        "/System/Library/Frameworks/UIKit.framework/UIKit",
+        "@loader_path/.jbroot/usr/lib/libsubstrate.dylib"
+      ],
+      "rpaths": [
+        "@loader_path/.jbroot/Library/Frameworks"
+      ],
+      "signature": [
+        65776,
+        688
+      ],
+      "codeSignatureVerified": true,
+      "label": "multi-release",
+      "scheme": "roothide",
+      "file": "NativeFixture_1.0.0_iphoneos-arm64e.deb",
+      "sha256": "bc6950d1cf085b1f02e4fd4c38589a3da35d0a676b09ec3e62ddbe834a88e4b2"
+    },
+    {
+      "cpu": "arm64",
+      "identifier": "@rpath/Fixture.dylib",
+      "dependencies": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libobjc.A.dylib",
+        "/usr/lib/libc++.1.dylib",
+        "/System/Library/Frameworks/Foundation.framework/Foundation",
+        "/System/Library/Frameworks/UIKit.framework/UIKit",
+        "@rpath/CydiaSubstrate.framework/CydiaSubstrate"
+      ],
+      "rpaths": [
+        "/var/jb/Library/Frameworks"
+      ],
+      "signature": [
+        66544,
+        688
+      ],
+      "codeSignatureVerified": true,
+      "label": "multi-debug",
+      "scheme": "rootless",
+      "file": "NativeFixture_1.0.0_iphoneos-arm64.deb",
+      "sha256": "38ad63a7ec57e5bee3f12c60c3668f928d4f4973c89d59c962e2d58f1510a8a0"
+    },
+    {
+      "cpu": "arm64",
+      "identifier": "@rpath/Fixture.dylib",
+      "dependencies": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libobjc.A.dylib",
+        "/usr/lib/libc++.1.dylib",
+        "/System/Library/Frameworks/Foundation.framework/Foundation",
+        "/System/Library/Frameworks/UIKit.framework/UIKit",
+        "@rpath/CydiaSubstrate.framework/CydiaSubstrate"
+      ],
+      "rpaths": [
+        "/Library/Frameworks"
+      ],
+      "signature": [
+        66544,
+        672
+      ],
+      "codeSignatureVerified": true,
+      "label": "multi-debug",
+      "scheme": "rootful",
+      "file": "NativeFixture_1.0.0_iphoneos-arm.deb",
+      "sha256": "29473525eabdbf33df015b99f6d1aa0bebfb35f2bc49b1fb616e17244a046764"
+    },
+    {
+      "cpu": "arm64",
+      "identifier": "@loader_path/.jbroot/Library/MobileSubstrate/DynamicLibraries/Fixture.dylib",
+      "dependencies": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libobjc.A.dylib",
+        "/usr/lib/libc++.1.dylib",
+        "/System/Library/Frameworks/Foundation.framework/Foundation",
+        "/System/Library/Frameworks/UIKit.framework/UIKit",
+        "@loader_path/.jbroot/usr/lib/libsubstrate.dylib"
+      ],
+      "rpaths": [
+        "@loader_path/.jbroot/Library/Frameworks"
+      ],
+      "signature": [
+        66544,
+        672
+      ],
+      "codeSignatureVerified": true,
+      "label": "multi-debug",
+      "scheme": "roothide",
+      "file": "NativeFixture_1.0.0_iphoneos-arm64e.deb",
+      "sha256": "8ab8b9830180801b860c36d0ca83e8436f0fdd9d6ca01036222f79a59ee099ea"
+    },
+    {
+      "cpu": "arm64",
+      "identifier": "@loader_path/.jbroot/Library/MobileSubstrate/DynamicLibraries/Fixture.dylib",
+      "dependencies": [
+        "/usr/lib/libSystem.B.dylib",
+        "/usr/lib/libobjc.A.dylib",
+        "/usr/lib/libc++.1.dylib",
+        "/System/Library/Frameworks/Foundation.framework/Foundation",
+        "/System/Library/Frameworks/UIKit.framework/UIKit",
+        "@loader_path/.jbroot/usr/lib/libsubstrate.dylib"
+      ],
+      "rpaths": [
+        "@loader_path/.jbroot/Library/Frameworks"
+      ],
+      "signature": [
+        65776,
+        688
+      ],
+      "codeSignatureVerified": true,
+      "label": "native-library-alias",
+      "scheme": "roothide",
+      "file": "NativeFixture_1.0.0_iphoneos-arm64e.deb",
+      "sha256": "a49f9075e7fba7931fa35e61d760cb1489257b2cd30fa1ce94bf4ca99a50e3f6"
+    },
+    {
+      "label": "standalone-release",
+      "scheme": "rootless",
+      "standalone": true,
+      "codeSignatureVerified": true
+    },
+    {
+      "label": "standalone-debug",
+      "scheme": "rootless",
+      "standalone": true,
+      "codeSignatureVerified": true
+    }
+  ]
+}

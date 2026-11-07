@@ -1,0 +1,37 @@
+{
+  "version": "1.0.9",
+  "build": 206,
+  "date": "2026-11-06",
+  "tests": {
+    "webToolsFixtureChecks": 77,
+    "toolRegistryChecks": 174,
+    "contextProjectionChecks": 121,
+    "tokenFormattingChecks": 20,
+    "liveAuthenticatedExa": "not run: no Exa API key supplied",
+    "deviceUI": "not tested on physical device"
+  },
+  "builds": {
+    "private": {
+      "file": "Dylix-1.0.9-build206-unsigned.ipa",
+      "bytes": 139982324,
+      "sha256": "a269678456d710da8cd898e37b76fba0c0df9ca0d9c17dc09140c74a48a3713d",
+      "zipIntegrity": "passed",
+      "codesignDeepStrict": "passed",
+      "bundleVersions": "passed",
+      "preservedResourceFiles": 31,
+      "personasUnchanged": true,
+      "flexManifest": "verified by build.py and packaged resource hashes"
+    },
+    "public": {
+      "file": "Dylix-1.0.9-build206-opensource-unsigned.ipa",
+      "bytes": 139882411,
+      "sha256": "1e6dbf0705c1fd01751d3dc4513312bcae3ab317ac6ba4557291a582b39a3cbf",
+      "zipIntegrity": "passed",
+      "codesignDeepStrict": "passed",
+      "bundleVersions": "passed",
+      "preservedResourceFiles": 5,
+      "personasUnchanged": true,
+      "flexManifest": "verified by build.py and packaged resource hashes"
+    }
+  }
+}

@@ -1,10 +1,19 @@
 #import <Foundation/Foundation.h>
+#ifdef TFAI_VISION_IMAGEIO
+#import <ImageIO/ImageIO.h>
+#endif
 // Foundation-only harness: image decoding is not exercised in these tests.
 @interface UIImage : NSObject
 + (instancetype)imageWithData:(NSData *)data;
 @end
 @implementation UIImage
-+ (instancetype)imageWithData:(NSData *)data {return nil;}
++ (instancetype)imageWithData:(NSData *)data {
+#ifdef TFAI_VISION_IMAGEIO
+ CGImageSourceRef source=CGImageSourceCreateWithData((__bridge CFDataRef)data,NULL);CGImageRef image=source?CGImageSourceCreateImageAtIndex(source,0,NULL):NULL;BOOL valid=image!=NULL;if(image)CGImageRelease(image);if(source)CFRelease(source);return valid?[self new]:nil;
+#else
+ return nil;
+#endif
+}
 @end
 NSString *UIApplicationDidEnterBackgroundNotification=@"FixtureBackground";
 #import "../App/AI/AIContracts.h"
@@ -18,6 +27,7 @@ static NSArray *FixtureToolSchemas;
 static NSArray *FixtureIsolationSchemas;
 static NSUInteger FixtureIsolationReads;
 static NSString *FixtureSkillMetadata;
+static NSUInteger fixturePolicyRevokes,fixturePlanClears;
 static NSUInteger requests,executions;static NSString *mode;static NSMutableArray *events;static NSDictionary *terminal;
 static void Check(BOOL yes,NSString *name){if(!yes){NSLog(@"FAIL %@",name);exit(1);}NSLog(@"PASS %@",name);}
 @implementation TFAITransport
@@ -47,9 +57,10 @@ static void Check(BOOL yes,NSString *name){if(!yes){NSLog(@"FAIL %@",name);exit(
 @end
 @implementation TFAIRuntimePolicy
 - (instancetype)initWithRoot:(NSString *)r projectID:(NSString *)p sessionID:(NSString *)s{return [super init];}
-- (NSTimeInterval)expiresAt{return NSDate.date.timeIntervalSince1970+1800;}
+- (NSTimeInterval)expiresAt{return 0;}
 - (NSString *)preset{return @"assisted";}
-- (void)revoke{}
+- (void)clearReviewedPlans{fixturePlanClears++;}
+- (void)revoke{fixturePolicyRevokes++;}
 - (NSDictionary *)decisionForPlan:(NSDictionary *)p{return @{@"decision":@"allowed",@"readOnly":@YES};}
 @end
 NSArray *TFAIMessageMetadata(NSArray *a,NSDictionary *b){return a;}

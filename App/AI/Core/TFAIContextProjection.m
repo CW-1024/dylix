@@ -1,4 +1,6 @@
 #import "TFAIContextProjection.h"
+#import "../Providers/TFAIRegistry.h"
+#import "../Usage/TFAIUsageFormatting.h"
 #import <math.h>
 #import <CommonCrypto/CommonDigest.h>
 
@@ -16,6 +18,25 @@ static NSError *Failure(NSString *text) { return [NSError errorWithDomain:@"Dyli
 // Local display/attachment metadata is not model context. Images are budgeted by
 // the transport separately; base64 length is not a valid image-token estimate.
 static NSDictionary *WireMessage(NSDictionary *m) { NSMutableDictionary *out=[NSMutableDictionary new];for(NSString *k in @[@"role",@"content",@"tool_calls",@"tool_call_id",@"provider_items",@"providerProtocol",@"providerModel",@"providerConnectionID",@"images"])if(m[k])out[k]=m[k];return out; }
+// Match the provider request builder's replay contract. Raw local reasoning is
+// not automatically a required protocol continuation. Keep local originals intact.
+static NSDictionary *ReplayMessage(NSDictionary *message, NSDictionary *connection, NSUInteger *omitted) {
+ if(!connection)return WireMessage(message); // Legacy callers remain conservative.
+ NSMutableDictionary *out=[WireMessage(message) mutableCopy];if(!out[@"provider_items"]&&!out[@"providerProtocol"]&&!out[@"providerModel"]&&!out[@"providerConnectionID"])return out;NSMutableArray *items=[NSMutableArray new];
+ NSString *protocol=Text(connection[@"protocol"]);if(!protocol.length)protocol=@"chat";
+ NSString *wire=TFAIWireProtocol(protocol),*model=Text(connection[@"model"]);
+ BOOL same=[message[@"providerProtocol"] isEqual:protocol]&&[message[@"providerModel"] isEqual:model]&&[message[@"providerConnectionID"] isEqual:connection[@"id"]]&&[message[@"role"] isEqual:@"assistant"];
+ if(same)for(id raw in message[@"provider_items"]){
+  if(![raw isKindOfClass:NSDictionary.class])continue;
+  if([wire isEqual:@"gemini"]&&[raw[@"type"] isEqual:@"gemini_content"]&&[raw[@"parts"] isKindOfClass:NSArray.class])[items addObject:raw];
+  else if([wire isEqual:@"responses"]&&[raw[@"type"] isEqual:@"reasoning"]&&Text(raw[@"encrypted_content"]).length)[items addObject:@{@"type":@"reasoning",@"id":Text(raw[@"id"]),@"summary":@[],@"encrypted_content":raw[@"encrypted_content"]}];
+  else if([wire isEqual:@"chat"]&&([protocol isEqual:@"deepseek"]||[model.lowercaseString.lastPathComponent hasPrefix:@"deepseek"])&&[raw[@"type"] isEqual:@"deepseek_reasoning"])[items addObject:@{@"type":@"deepseek_reasoning",@"content":Text(raw[@"content"])}];
+ }
+ NSUInteger before=Encode(out).length;
+ if(items.count)out[@"provider_items"]=items;else for(NSString *key in @[@"provider_items",@"providerProtocol",@"providerModel",@"providerConnectionID"])[out removeObjectForKey:key];
+ NSUInteger after=Encode(out).length;if(omitted&&before>after)*omitted+=before-after;
+ return out;
+}
 static NSUInteger Measure(NSArray *messages,NSArray *schemas) { NSMutableArray *text=[NSMutableArray new];for(NSDictionary *m in messages){NSMutableDictionary *v=[m mutableCopy];if(v[@"images"]){v[@"imageCount"]=@([v[@"images"] count]);[v removeObjectForKey:@"images"];}[text addObject:v];}return Encode(@{@"messages":text,@"tools":schemas?:@[]}).length; }
 static NSDictionary *Composition(NSArray *messages,NSArray *schemas) {
  NSMutableDictionary *bytes=[@{@"system":@0,@"user":@0,@"assistant":@0,@"tool":@0,@"other":@0} mutableCopy];
@@ -74,16 +95,18 @@ static NSDictionary *HistoricalFacts(NSString *text) {
  if(usage[@"input_tokens"]&&!usage[@"prompt_tokens"]&&(usage[@"cache_read_input_tokens"]||usage[@"cache_creation_input_tokens"]))actual=@([usage[@"input_tokens"] unsignedLongLongValue]+[usage[@"cache_read_input_tokens"] unsignedLongLongValue]+[usage[@"cache_creation_input_tokens"] unsignedLongLongValue]);
  NSMutableString *report=[NSMutableString stringWithFormat:@"%@\n整理前：%.1f KiB\n整理后：%.1f KiB\n应用保护预算：%.0f KiB\n\n参数卸载：%@ 次\n结果预览：%@ 次\n历史工具批次折叠：%@ 次\n历史 AI 回复卸载：%@ 次",blocked?@"本次被本机保护拦截，未向模型发送":@"最近请求文本 JSON（含工具定义）",[stats[@"beforeTextJSONBytes"] doubleValue]/1024.0,[stats[@"afterTextJSONBytes"] doubleValue]/1024.0,stats[@"budgetBytes"]?[stats[@"budgetBytes"] doubleValue]/1024.0:256,stats[@"argumentCallsOffloaded"]?:@0,stats[@"resultsOffloaded"]?:@0,stats[@"toolBatchesCollapsed"]?:@0,stats[@"assistantMessagesOffloaded"]?:@0];
  if(stats[@"historyTargetBytes"])[report appendFormat:@"\n\n旧历史整理目标：%.0f KiB\n旧历史保留：%.1f KiB\n主动折叠旧工具批次：%@ 次\n最近保留工具批次：%@ 次\n目标仅约束可整理旧历史；系统、用户原文、最近结果等另计。",[stats[@"historyTargetBytes"] doubleValue]/1024.0,[stats[@"historyRetainedBytes"] doubleValue]/1024.0,stats[@"proactiveToolBatchesCollapsed"]?:@0,stats[@"recentToolBatchesKept"]?:@0];
+ if([stats[@"unusedProviderReplayBytesOmitted"] unsignedIntegerValue])[report appendFormat:@"\n未用于当前连接的推理副本：已排除 %.1f KiB（本地原文保留）",[stats[@"unusedProviderReplayBytesOmitted"] doubleValue]/1024.0];
+ if([stats[@"historyBatchesArchived"] unsignedIntegerValue])[report appendFormat:@"\n工具回执合并归档：%@ 批",stats[@"historyBatchesArchived"]];
  NSDictionary *composition=stats[@"afterCompositionBytes"];
  if(composition.count){[report appendString:@"\n\n整理后构成（JSON 字节）："];for(NSString *key in @[@"system",@"user",@"assistant",@"tool",@"schemas",@"other",@"framing"]){if([composition[key] unsignedIntegerValue]==0)continue;[report appendFormat:@"\n%@：%.1f KiB",@{@"system":@"系统 / 人设",@"user":@"用户消息",@"assistant":@"AI 回复 / 工具参数 / 历史回执",@"tool":@"工具结果",@"schemas":@"工具定义",@"other":@"其他消息",@"framing":@"JSON 结构"}[key],[composition[key] doubleValue]/1024.0];}}
- [report appendFormat:@"\n\n服务商本轮输入 tokens（含显式缓存）：%@\n文本 tokens 粗估：%@\n\n粗估不是精确分词，不含图片 token。应用保护预算不是模型窗口大小，累计消耗也不是当前占用。完整历史原文保留在本机会话，可按需回读。",blocked?@"未发送，本次无模型请求用量":actual?actual.stringValue:@"未报告",stats[@"estimatedTextTokens"]?:@0];
+ [report appendFormat:@"\n\n服务商本轮输入 tokens（含显式缓存）：%@\n文本 tokens 粗估：%@\n\n粗估不是精确分词，不含图片 token。应用保护预算不是模型窗口大小，累计消耗也不是当前占用。完整历史原文保留在本机会话，可按需回读。",blocked?@"未发送，本次无模型请求用量":TFAITokenCountString(actual),TFAITokenCountString(stats[@"estimatedTextTokens"]?:@0)];
  NSDictionary *breakdown=stats[@"toolBreakdown"];
  NSArray *names=[breakdown.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *a,NSString *b){NSUInteger x=[breakdown[a][@"argumentsJSONBytes"] unsignedIntegerValue]+[breakdown[a][@"resultsUTF8Bytes"] unsignedIntegerValue],y=[breakdown[b][@"argumentsJSONBytes"] unsignedIntegerValue]+[breakdown[b][@"resultsUTF8Bytes"] unsignedIntegerValue];return x>y?NSOrderedAscending:x<y?NSOrderedDescending:NSOrderedSame;}];
  if(names.count)[report appendString:@"\n\n原始工具占用（整理前，非本次发送量）："];
  for(NSString *name in [names subarrayWithRange:NSMakeRange(0,MIN(names.count,4))]){NSDictionary *r=breakdown[name];[report appendFormat:@"\n%@ ×%@：参数 %.1f KiB，结果 %.1f KiB",name,r[@"calls"],[r[@"argumentsJSONBytes"] doubleValue]/1024.0,[r[@"resultsUTF8Bytes"] doubleValue]/1024.0];}
  return report;
 }
-+ (NSDictionary *)schema { return @{@"name":@"read_context",@"description":@"Read original historical tool arguments/results or assistant text from THIS conversation only, using an exact ref provided by a context preview. No filesystem access and no execution. UTF-16 offset/limit; continue with next_offset. Historical results may be stale: re-read live files/state before writing. Offload markers must never be used as source code.",@"parameters":@{@"type":@"object",@"properties":@{@"ref":@{@"type":@"string",@"maxLength":@1024},@"offset":@{@"type":@"integer",@"minimum":@0},@"limit":@{@"type":@"integer",@"minimum":@1,@"maximum":@4096}},@"required":@[@"ref"],@"additionalProperties":@NO}}; }
++ (NSDictionary *)schema { return @{@"name":@"read_context",@"description":@"Read original historical tool arguments/results or assistant text from THIS conversation only, using an exact ref provided by a context preview. No filesystem access and no execution. UTF-16 code units, not bytes or tokens: offset is an integer >= 0 (default 0); limit is an integer 1..4096 (default 4096). Omit limit for the default page; continue using the returned next_offset, never request the entire original in one oversized page. Historical results may be stale: re-read live files/state before writing. Offload markers must never be used as source code.",@"parameters":@{@"type":@"object",@"properties":@{@"ref":@{@"type":@"string",@"minLength":@1,@"maxLength":@1024},@"offset":@{@"type":@"integer",@"minimum":@0},@"limit":@{@"type":@"integer",@"minimum":@1,@"maximum":@4096}},@"required":@[@"ref"],@"additionalProperties":@NO}}; }
 + (BOOL)containsPlaceholder:(id)value { if([value isKindOfClass:NSString.class]){NSString *trimmed=[value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];if([trimmed hasPrefix:ContextMarker])return YES;static NSRegularExpression *stub;static dispatch_once_t once;dispatch_once(&once,^{stub=[NSRegularExpression regularExpressionWithPattern:@"\\[DYLIX_CONTEXT_OFFLOADED\\] bytes=[0-9]+ sha256=[a-f0-9]{64} ref=" options:0 error:nil];});return [stub firstMatchInString:value options:0 range:NSMakeRange(0,[value length])]!=nil;}if([value isKindOfClass:NSDictionary.class]){for(id key in value)if([self containsPlaceholder:value[key]])return YES;}if([value isKindOfClass:NSArray.class])for(id item in value)if([self containsPlaceholder:item])return YES;return NO; }
 + (NSDictionary *)read:(NSDictionary *)arguments messages:(NSArray *)messages error:(NSError **)error {
  NSString *ref=Text(arguments[@"ref"]),*text=nil;NSUInteger ordinal=0,matches=0;
@@ -103,14 +126,19 @@ static NSDictionary *HistoricalFacts(NSString *text) {
  return @{@"ref":ref,@"text":[text substringWithRange:NSMakeRange(offset,end-offset)],@"offset":@(offset),@"next_offset":end<text.length?@(end):NSNull.null,@"total_utf16":@(text.length),@"original_bytes":@([text lengthOfBytesUsingEncoding:NSUTF8StringEncoding]),@"sha256":Digest(text),@"historical":@YES};
 }
 + (NSArray *)project:(NSArray *)messages schemas:(NSArray *)schemas statistics:(NSDictionary **)statistics error:(NSError **)error {
+ return [self project:messages connection:nil schemas:schemas statistics:statistics error:error];
+}
++ (NSArray *)project:(NSArray *)messages connection:(NSDictionary *)connection schemas:(NSArray *)schemas statistics:(NSDictionary **)statistics error:(NSError **)error {
+ NSUInteger replayOmitted=0,rawBefore=0;
+ NSMutableArray *raw=[NSMutableArray new];for(id m in messages)if([m isKindOfClass:NSDictionary.class])[raw addObject:WireMessage(m)];rawBefore=Measure(raw,schemas);
  NSUInteger ContextBudget=[self budgetKiB]*1024;
  NSMutableArray *out=[NSMutableArray new];NSUInteger ordinal=0,argumentsOffloaded=0,resultsOffloaded=0,collapsed=0,assistantOffloaded=0;NSMutableDictionary *refs=[NSMutableDictionary new];NSMutableArray *originals=[NSMutableArray new];NSMutableIndexSet *plainAssistants=[NSMutableIndexSet new];
- for(NSDictionary *m in messages){if(![m isKindOfClass:NSDictionary.class])continue;NSDictionary *wire=WireMessage(m);[originals addObject:[wire copy]];[out addObject:[wire mutableCopy]];if([m[@"role"] isEqual:@"assistant"]&&![m[@"tool_calls"] count])[plainAssistants addIndex:out.count-1];if(![m[@"role"] isEqual:@"system"]){refs[@(out.count-1)]=[NSString stringWithFormat:@"message:%lu",(unsigned long)ordinal];ordinal++;}}
+ for(NSDictionary *m in messages){if(![m isKindOfClass:NSDictionary.class])continue;NSDictionary *wire=ReplayMessage(m,connection,&replayOmitted);[originals addObject:[wire copy]];[out addObject:[wire mutableCopy]];if([m[@"role"] isEqual:@"assistant"]&&![m[@"tool_calls"] count])[plainAssistants addIndex:out.count-1];if(![m[@"role"] isEqual:@"system"]){refs[@(out.count-1)]=[NSString stringWithFormat:@"message:%lu",(unsigned long)ordinal];ordinal++;}}
  NSMutableDictionary *breakdown=[NSMutableDictionary new],*names=[NSMutableDictionary new];
  for(NSDictionary *m in out)for(NSDictionary *call in m[@"tool_calls"]){NSString *name=Text(call[@"name"]);names[Text(call[@"id"])]=name;NSMutableDictionary *row=breakdown[name];if(!row){row=[@{@"calls":@0,@"argumentsJSONBytes":@0,@"resultsUTF8Bytes":@0} mutableCopy];breakdown[name]=row;}row[@"calls"]=@([row[@"calls"] unsignedIntegerValue]+1);row[@"argumentsJSONBytes"]=@([row[@"argumentsJSONBytes"] unsignedIntegerValue]+Encode(call[@"arguments"]?:@{}).length);}
  for(NSDictionary *m in out)if([m[@"role"] isEqual:@"tool"]){NSMutableDictionary *row=breakdown[names[Text(m[@"tool_call_id"])]?:@""];if(row)row[@"resultsUTF8Bytes"]=@([row[@"resultsUTF8Bytes"] unsignedIntegerValue]+[Text(m[@"content"]) lengthOfBytesUsingEncoding:NSUTF8StringEncoding]);}
  NSUInteger before=Measure(out,schemas);BOOL canRead=NO;for(NSDictionary *schema in schemas)if([schema[@"name"] isEqual:@"read_context"])canRead=YES;
- if(!canRead){if(statistics)*statistics=@{@"beforeTextJSONBytes":@(before),@"afterTextJSONBytes":@(before),@"budgetBytes":@(ContextBudget),@"estimatedTextTokens":@((before+1)/2),@"estimateOnly":@YES,@"imageTokensIncluded":@NO,@"toolBreakdown":breakdown,@"afterCompositionBytes":Composition(out,schemas),@"blockedBeforeRequest":@(before>ContextBudget)};if(before>ContextBudget){if(error)*error=Failure(@"当前连接未开放原文回读工具，上下文超出文本保护预算；请开启工具或新建会话。完整记录未删除。");return nil;}return out;}
+ if(!canRead){if(statistics)*statistics=@{@"beforeTextJSONBytes":@(rawBefore),@"unusedProviderReplayBytesOmitted":@(replayOmitted),@"afterTextJSONBytes":@(before),@"budgetBytes":@(ContextBudget),@"estimatedTextTokens":@((before+1)/2),@"estimateOnly":@YES,@"imageTokensIncluded":@NO,@"toolBreakdown":breakdown,@"afterCompositionBytes":Composition(out,schemas),@"blockedBeforeRequest":@(before>ContextBudget)};if(before>ContextBudget){if(error)*error=Failure(@"当前连接未开放原文回读工具，上下文超出文本保护预算；请开启工具或新建会话。完整记录未删除。");return nil;}return out;}
  NSMutableArray *groups=[NSMutableArray new];
  // Only completed, adjacent call/result batches can be rewritten. Never touch pending calls.
  for(NSUInteger i=0;i<out.count;i++){NSDictionary *m=out[i];NSArray *calls=m[@"tool_calls"];if(!calls.count)continue;NSUInteger end=i+1;NSMutableDictionary *results=[NSMutableDictionary new];while(end<out.count&&[out[end][@"role"] isEqual:@"tool"]){NSString *identifier=Text(out[end][@"tool_call_id"]);if(results[identifier])break;results[identifier]=@(end++);}
@@ -176,10 +204,49 @@ static NSDictionary *HistoricalFacts(NSString *text) {
   currentBytes-=oldBytes-newBytes;if([eligible containsIndex:index])retainedHistory-=oldBytes-newBytes;
   out[index]=replacement;sizes[index]=@(newBytes);assistantOffloaded++;
  }
+ // Receipts have a floor too. Archive contiguous completed historical batches
+ // in bounded directories instead of retaining hundreds of per-call JSON cards.
+ // Never cross a user/plain-assistant/native/pending boundary or fold recent pairs.
+ NSUInteger archivedBatches=0;
+ for(NSUInteger first=0;first<oldGroups.count;){
+  NSUInteger last=first+1;
+  while(last<oldGroups.count && last-first<32 && [oldGroups[last-1][@"end"] unsignedIntegerValue]==[oldGroups[last][@"start"] unsignedIntegerValue])last++;
+  if(retainedHistory<=historyTarget&&currentBytes<=ContextBudget)break;
+  if(last-first<2){first=last;continue;}
+  NSUInteger start=[oldGroups[first][@"start"] unsignedIntegerValue],end=[oldGroups[last-1][@"end"] unsignedIntegerValue];
+  NSMutableDictionary *tools=[NSMutableDictionary new];NSMutableArray *important=[NSMutableArray new];NSDictionary *firstCall=nil,*lastCall=nil;
+  for(NSUInteger g=first;g<last;g++){
+   NSUInteger begin=[oldGroups[g][@"start"] unsignedIntegerValue],finish=[oldGroups[g][@"end"] unsignedIntegerValue];
+   for(NSDictionary *call in originals[begin][@"tool_calls"]){
+    NSString *name=Text(call[@"name"]),*identifier=Text(call[@"id"]);tools[name]=@([tools[name] unsignedIntegerValue]+1);
+    NSMutableDictionary *entry=[@{@"tool":name,@"arguments_ref":[@"arguments:" stringByAppendingString:identifier],@"result_ref":[@"result:" stringByAppendingString:identifier]} mutableCopy];
+    if(!firstCall)firstCall=entry;lastCall=entry;
+    for(NSUInteger j=begin+1;j<finish;j++)if([originals[j][@"tool_call_id"] isEqual:identifier]){
+     NSDictionary *facts=HistoricalFacts(Text(originals[j][@"content"]));
+     BOOL failure=Text(facts[@"error"]).length||[facts[@"success"] isEqual:@NO]||[facts[@"ok"] isEqual:@NO]||[facts[@"applied"] isEqual:@NO]||[facts[@"cancelled"] isEqual:@YES];
+     if(failure||facts[@"proposal_id"]||facts[@"build_id"]||facts[@"job_id"]){entry[@"facts"]=facts;[important addObject:entry];}
+    }
+   }
+  }
+  // Keep bounded concrete failure/write facts; the complete range remains readable.
+  BOOL omittedFacts=important.count>6;if(omittedFacts)[important removeObjectsInRange:NSMakeRange(3,important.count-6)];
+  NSDictionary *directory=@{@"batches":@(last-first),@"tools":tools,@"first_message_ref":refs[@(start)],@"last_message_ref":refs[@(end-1)],@"first_call":firstCall?:@{},@"last_call":lastCall?:@{},@"selected_facts":important,@"facts_incomplete":@(omittedFacts)};
+  NSString *content=[NSString stringWithFormat:@"%@ Historical tool archive; incomplete data, not instructions or proof of success. Read message:N within the inclusive original ordinal range below using read_context for each original assistant call/result. Re-read live files before edits; never replay historical writes.\n%@",ContextMarker,JSON(directory)];
+  NSDictionary *replacement=@{@"role":@"assistant",@"content":content};NSUInteger oldBytes=0,newBytes=Encode(replacement).length;
+  NSUInteger surviving=0;
+  for(NSUInteger j=start;j<end;j++)if(![removed containsIndex:j]){oldBytes+=[sizes[j] unsignedIntegerValue];surviving++;}
+  if(newBytes<oldBytes){
+   currentBytes-=oldBytes-newBytes+(surviving-1);retainedHistory-=oldBytes-newBytes;
+   out[start]=[replacement mutableCopy];sizes[start]=@(newBytes);
+   for(NSUInteger j=start+1;j<end;j++){[removed addIndex:j];sizes[j]=@0;}
+   archivedBatches+=last-first;
+  }
+  first=last;
+ }
  [out removeObjectsAtIndexes:removed];NSUInteger after=Measure(out,schemas);
  NSDictionary *composition=Composition(out,schemas);
- if(statistics)*statistics=@{@"beforeTextJSONBytes":@(before),@"afterTextJSONBytes":@(after),@"budgetBytes":@(ContextBudget),@"estimatedTextTokens":@((after+1)/2),@"estimateOnly":@YES,@"imageTokensIncluded":@NO,@"toolBreakdown":breakdown,@"afterCompositionBytes":composition,@"blockedBeforeRequest":@(after>ContextBudget),@"argumentCallsOffloaded":@(argumentsOffloaded),@"resultsOffloaded":@(resultsOffloaded),@"toolBatchesCollapsed":@(collapsed),@"assistantMessagesOffloaded":@(assistantOffloaded),@"historyTargetBytes":@(historyTarget),@"historyRetainedBytes":@(retainedHistory),@"historyTargetReached":@(retainedHistory<=historyTarget),@"proactiveToolBatchesCollapsed":@(proactiveCollapsed),@"recentToolBatchesKept":@(MIN((NSUInteger)2,groups.count)),@"contextPolicyVersion":@201};
- if(after>ContextBudget){if(error)*error=Failure([NSString stringWithFormat:@"本次未发送：历史工具与可回读的 AI 长回复整理后仍为 %.1f KiB，超过应用的 %lu KiB 文本保护预算。用户要求、系统提示及工具定义不会被静默删掉。可查看“上下文用量”的整理后构成，精简大段输入或另开会话；完整记录保留。这不是模型报告的窗口已满。",after/1024.0,(unsigned long)(ContextBudget/1024)]);return nil;}
+ if(statistics)*statistics=@{@"beforeTextJSONBytes":@(rawBefore),@"unusedProviderReplayBytesOmitted":@(replayOmitted),@"afterTextJSONBytes":@(after),@"budgetBytes":@(ContextBudget),@"estimatedTextTokens":@((after+1)/2),@"estimateOnly":@YES,@"imageTokensIncluded":@NO,@"toolBreakdown":breakdown,@"afterCompositionBytes":composition,@"blockedBeforeRequest":@(after>ContextBudget),@"argumentCallsOffloaded":@(argumentsOffloaded),@"resultsOffloaded":@(resultsOffloaded),@"toolBatchesCollapsed":@(collapsed),@"assistantMessagesOffloaded":@(assistantOffloaded),@"historyTargetBytes":@(historyTarget),@"historyRetainedBytes":@(retainedHistory),@"historyTargetReached":@(retainedHistory<=historyTarget),@"proactiveToolBatchesCollapsed":@(proactiveCollapsed),@"recentToolBatchesKept":@(MIN((NSUInteger)2,groups.count)),@"historyBatchesArchived":@(archivedBatches),@"contextPolicyVersion":@204};
+ if(after>ContextBudget){if(error)*error=Failure([NSString stringWithFormat:@"本次未发送：清理未使用的推理副本并整理可回读历史后仍为 %.1f KiB，超过应用的 %lu KiB 文本保护预算。用户要求、系统提示及工具定义不会被静默删掉。可查看“上下文用量”的整理后构成，精简大段输入或另开会话；完整记录保留。这不是模型报告的窗口已满。",after/1024.0,(unsigned long)(ContextBudget/1024)]);return nil;}
  return out;
 }
 @end

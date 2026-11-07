@@ -301,6 +301,7 @@ static id Clean(id value){
    if([type isEqual:@"done"]){session[@"messages"]=event[@"messages"]?:session[@"messages"];session[@"state"]=event[@"state"]?:@"interrupted";session[@"remoteRevision"]=@([session[@"remoteRevision"] unsignedLongLongValue]+1);NSError *saveError=nil;[TFAISessions save:session project:scope error:&saveError];TFAISetSessionLiveRun(scope,sid,NO);dispatch_async(self.queue,^{[self finish:job result:@{@"sessionID":sid,@"state":session[@"state"],@"messages":session[@"messages"]} error:saveError];[self.runtimes removeObjectForKey:job[@"id"]];});}
    if(![type isEqual:@"checkpoint"])dispatch_async(self.queue,^{
     NSMutableArray *events=job[@"events"];if(!events){events=[NSMutableArray new];job[@"events"]=events;}NSMutableDictionary *record=[Clean(event) mutableCopy];NSUInteger sequence=[job[@"eventSequence"] unsignedIntegerValue]+1;job[@"eventSequence"]=@(sequence);record[@"sequence"]=@(sequence);[events addObject:record];while(events.count>80)[events removeObjectAtIndex:0];
+    if([type isEqual:@"flex_capture_status"])job[@"flexCaptureStatus"]=record;
     if([@[@"reasoning",@"analysis_summary"] containsObject:type]){NSString *next=[(job[@"reasoning"]?:@"") stringByAppendingString:event[@"text"]?:@""];job[@"reasoning"]=next.length>128000?[next substringFromIndex:next.length-128000]:next;}
     if([type isEqual:@"text"]){NSString *previous=job[@"text"]?:@"";NSString *next=[previous stringByAppendingString:event[@"text"]?:@""];job[@"text"]=next.length>512000?[next substringFromIndex:next.length-512000]:next;}
    });

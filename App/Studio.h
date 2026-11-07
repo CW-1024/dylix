@@ -31,6 +31,7 @@ UIViewController *TMCStudioRoot(void);
 
 #if TARGET_OS_SIMULATOR
 UIViewController *TFAIV2Regression(void);
+UIViewController *TFAIComposer209Regression(void);
 UIViewController *TFAIRecovery110Regression(void);
 UIViewController *TFAIAudio110Regression(void);
 UIViewController *TFAIAttachments108Regression(void);

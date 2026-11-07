@@ -15,6 +15,9 @@ UIButtonConfiguration *TMCButtonConfiguration(BOOL prominent){
  }
  return prominent?UIButtonConfiguration.filledButtonConfiguration:UIButtonConfiguration.tintedButtonConfiguration;
 }
+UINavigationBarAppearance *TMCTransparentChatBarAppearance(void){
+ UINavigationBarAppearance *bar=[UINavigationBarAppearance new];[bar configureWithTransparentBackground];bar.backgroundEffect=nil;bar.backgroundColor=UIColor.clearColor;bar.shadowColor=UIColor.clearColor;bar.titleTextAttributes=@{NSForegroundColorAttributeName:UIColor.labelColor};bar.largeTitleTextAttributes=@{NSForegroundColorAttributeName:UIColor.labelColor};return bar;
+}
 // UINavigationBar owns its glass and scroll-edge rendering. Never insert an
 // effect view into the system bar: its internal layering changes across iOS.
 static void NavigationTrace(NSString *message){static dispatch_queue_t queue;static dispatch_once_t once;dispatch_once(&once,^{queue=dispatch_queue_create("com.xuegao.tweakforge.navigation.trace",DISPATCH_QUEUE_SERIAL);});NSString *line=[NSString stringWithFormat:@"%.3f %@\n",NSProcessInfo.processInfo.systemUptime,message];dispatch_async(queue,^{NSString *docs=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;NSString *path=[docs stringByAppendingPathComponent:@"navigation-performance.log"];NSFileManager *fm=NSFileManager.defaultManager;if([[fm attributesOfItemAtPath:path error:nil][NSFileSize] unsignedLongLongValue]>262144)[fm removeItemAtPath:path error:nil];if(![fm fileExistsAtPath:path])[fm createFileAtPath:path contents:nil attributes:nil];NSFileHandle *file=[NSFileHandle fileHandleForWritingAtPath:path];@try{[file seekToEndOfFile];[file writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];}@catch(NSException *exception){}[file closeFile];});}
