@@ -18,6 +18,7 @@ typedef void (^TFAIResult)(NSDictionary * _Nullable result, NSError * _Nullable 
 + (BOOL)save:(NSDictionary *)connection secret:(nullable NSString *)secret error:(NSError **)error;
 + (void)remove:(NSString *)identifier;
 + (NSString *)secret:(NSString *)identifier;
++ (nullable NSDictionary *)customHeaders:(NSString *)identifier error:(NSError **)error;
 + (nullable NSDictionary *)effectiveForProject:(nullable NSString *)projectID;
 + (void)setConnection:(nullable NSString *)identifier project:(nullable NSString *)projectID;
 @end
