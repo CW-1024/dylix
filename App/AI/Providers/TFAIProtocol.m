@@ -19,22 +19,50 @@ NSString *TFAIThinkingScope(NSDictionary *c){
  NSData *data=[NSJSONSerialization dataWithJSONObject:@[c[@"protocol"]?:@"chat",endpoint.absoluteString,c[@"model"]?:@""] options:0 error:nil];return [[NSString alloc]initWithData:data encoding:NSUTF8StringEncoding]?:@"";
 }
 NSDictionary *TFAIThinkingConfiguration(NSDictionary *c){
- NSArray *options=TFAIFamilyReasoningOptions(c);NSString *source=@"模型族建议 · 尚未验证当前服务";NSString *wire=@"automatic";
+ NSArray *options=TFAIFamilyReasoningOptions(c);NSString *source=@"模型族建议 · 尚未验证当前服务";
+ NSString *protocol=WireProtocol(c[@"protocol"]?:@"chat"),*model=TFAINormalizedModelID(c[@"model"]),*host=[NSURL URLWithString:c[@"baseURL"]?:@""].host.lowercaseString?:@"";
+ NSString *wire=@"reasoning_effort";
+ if([protocol isEqual:@"responses"]||[c[@"protocol"] isEqual:@"openrouter"]||[host isEqual:@"openrouter.ai"])wire=@"reasoning";
+ else if([protocol isEqual:@"anthropic"]){BOOL adaptive=[model rangeOfString:@"^claude-(?:(?:opus|sonnet)-4-[6-9]|(?:opus|sonnet)-[5-9])" options:NSRegularExpressionSearch].location!=NSNotFound;wire=adaptive?@"anthropic_adaptive":@"anthropic_budget";}
+ else if([protocol isEqual:@"gemini"])wire=[model hasPrefix:@"gemini-2.5"]?@"gemini_budget":@"gemini_level";
+ else if([host isEqual:@"api.siliconflow.cn"]||[host isEqual:@"api.siliconflow.com"]||[c[@"protocol"] isEqual:@"siliconflow"]){if([model rangeOfString:@"^(deepseek|qwen|glm|kimi|moonshot)" options:NSRegularExpressionSearch].location!=NSNotFound)wire=@"enable_thinking";}
+ else if([model hasPrefix:@"deepseek"]||[c[@"protocol"] isEqual:@"deepseek"]||[model hasPrefix:@"glm-"]||[model hasPrefix:@"kimi-k2.5"])wire=@"thinking";
+ else if([model hasPrefix:@"qwen"])wire=@"enable_thinking";
+ if([@[@"enable_thinking",@"chat_template_kwargs"] containsObject:wire]&&options.count>1)options=@[@{@"id":@"auto",@"name":@"默认"},@{@"id":@"enabled",@"name":@"开启思考"}];
+ NSDictionary *metadata=TFAIModelMetadata(c);NSArray *levels=metadata[@"efforts"];NSString *declaredWire=metadata[@"thinkingWire"];
+ if([TFAIThinkingWires(c[@"protocol"]) containsObject:declaredWire?:@""])wire=declaredWire;
+ BOOL explicitlyOff=[metadata[@"capabilities"][@"thinking"] isEqual:@"unsupported"];
+ if(levels.count||explicitlyOff){source=@"当前服务模型列表声明 · 尚未验证参数是否生效";options=@[@{@"id":@"auto",@"name":@"默认"}];}
  NSDictionary *map=[c[@"thinkingOverrides"] isKindOfClass:NSDictionary.class]?c[@"thinkingOverrides"]:@{};id raw=map[TFAIThinkingScope(c)];NSDictionary *override=[raw isKindOfClass:NSDictionary.class]?raw:nil;
- NSString *protocol=c[@"protocol"]?:@"chat";
- BOOL chat=[WireProtocol(protocol) isEqual:@"chat"];
- if(override&&chat&&[@[@"reasoning_effort",@"thinking",@"enable_thinking",@"disabled"] containsObject:override[@"wire"]]){
-  wire=override[@"wire"];NSMutableArray *valid=[NSMutableArray arrayWithObject:@{@"id":@"auto",@"name":@"默认"}];NSDictionary *names=@{@"minimal":@"最少",@"low":@"轻",@"medium":@"中",@"high":@"高",@"xhigh":@"极高",@"ultra":@"Ultra",@"max":@"最高",@"enabled":@"开启思考"};
-  NSArray *levels=[override[@"levels"] isKindOfClass:NSArray.class]?override[@"levels"]:@[];
-  for(id level in levels)if([level isKindOfClass:NSString.class]&&names[level]&&![[valid valueForKey:@"id"] containsObject:level]&&![wire isEqual:@"disabled"]){if([wire isEqual:@"enable_thinking"]&&![level isEqual:@"enabled"])continue;[valid addObject:@{@"id":level,@"name":names[level]}];}
-  options=valid;source=@"当前连接手动配置 · 仅作用于此端点与模型";
- }else if(options.count==1)source=@"协议默认 · 未声明可调思考参数";
+ BOOL manual=override&&[TFAIThinkingWires(c[@"protocol"]) containsObject:override[@"wire"]?:@""];
+ if(manual){wire=override[@"wire"];levels=[override[@"levels"] isKindOfClass:NSArray.class]?override[@"levels"]:@[];source=@"当前连接手动配置 · 仅作用于此端点、协议与模型";options=@[@{@"id":@"auto",@"name":@"默认"}];}
+ if((levels.count&&!explicitlyOff)||manual){NSMutableArray *valid=[NSMutableArray arrayWithObject:@{@"id":@"auto",@"name":@"默认"}];NSDictionary *names=@{@"none":@"关闭思考",@"minimal":@"最少",@"low":@"轻",@"medium":@"中",@"high":@"高",@"xhigh":@"极高",@"ultra":@"Ultra",@"max":@"最高",@"enabled":@"开启思考"};
+  for(id level in levels){if(![level isKindOfClass:NSString.class]||!names[level]||[[valid valueForKey:@"id"] containsObject:level]||![TFAIThinkingLevelsForWire(wire) containsObject:level])continue;
+   BOOL toggle=[@[@"enable_thinking",@"chat_template_kwargs"] containsObject:wire];if(toggle&&![level isEqual:@"enabled"]&&![level isEqual:@"none"])continue;
+   if([level isEqual:@"none"]&&![@[@"reasoning_effort",@"reasoning",@"enable_thinking",@"chat_template_kwargs",@"thinking"] containsObject:wire])continue;
+   [valid addObject:@{@"id":level,@"name":names[level]}];}
+  options=valid;
+ }
+ if(options.count==1&&!manual&&!levels.count)source=explicitlyOff?@"服务声明不支持思考，可手动覆写":@"尚未识别可调档位，可在模型能力中手动适配";
  return @{@"options":options,@"source":source,@"wire":wire,@"scope":TFAIThinkingScope(c)};
+}
+static void TFApplyThinking(NSMutableDictionary *body,NSDictionary *c,NSString *effort){
+ NSString *wire=TFAIThinkingConfiguration(c)[@"wire"];BOOL off=[effort isEqual:@"none"];
+ NSInteger budget=[effort isEqual:@"low"]?1024:[effort isEqual:@"medium"]?4096:8192;
+ if([wire isEqual:@"reasoning_effort"])body[@"reasoning_effort"]=effort;
+ else if([wire isEqual:@"reasoning"]){NSMutableDictionary *r=[body[@"reasoning"] mutableCopy]?:[NSMutableDictionary new];r[@"effort"]=effort;body[@"reasoning"]=r;}
+ else if([wire isEqual:@"enable_thinking"])body[@"enable_thinking"]=@(!off);
+ else if([wire isEqual:@"chat_template_kwargs"])body[@"chat_template_kwargs"]=@{@"enable_thinking":@(!off)};
+ else if([wire isEqual:@"thinking"]){body[@"thinking"]=@{@"type":off?@"disabled":@"enabled"};if(!off&&![effort isEqual:@"enabled"])body[@"reasoning_effort"]=effort;}
+ else if([wire isEqual:@"thinking_budget"]){body[@"enable_thinking"]=@YES;body[@"thinking_budget"]=@(budget);body[@"max_tokens"]=@16384;}
+ else if([wire isEqual:@"anthropic_budget"]){body[@"thinking"]=@{@"type":@"enabled",@"budget_tokens":@(budget)};body[@"max_tokens"]=@16384;}
+ else if([wire isEqual:@"anthropic_adaptive"]){body[@"thinking"]=@{@"type":@"adaptive"};body[@"output_config"]=@{@"effort":effort};}
+ else if([wire isEqual:@"gemini_budget"]||[wire isEqual:@"gemini_level"]){NSMutableDictionary *generation=[body[@"generationConfig"] mutableCopy]?:[NSMutableDictionary new];NSMutableDictionary *thinking=[@{@"includeThoughts":@YES} mutableCopy];thinking[[wire isEqual:@"gemini_budget"]?@"thinkingBudget":@"thinkingLevel"]=[wire isEqual:@"gemini_budget"]?(id)@(budget):(id)effort;generation[@"thinkingConfig"]=thinking;body[@"generationConfig"]=generation;}
 }
 NSArray<NSDictionary *> *TFAIReasoningOptions(NSDictionary *c){return TFAIThinkingConfiguration(c)[@"options"];}
 NSString *TFAIValidatedReasoningEffort(NSDictionary *c,NSString *effort){return [[TFAIReasoningOptions(c) valueForKey:@"id"] containsObject:effort?:@"auto"]?(effort?:@"auto"):@"auto";}
 NSString *TFAIReasoningRequestSummary(NSDictionary *body,NSDictionary *c){
- NSMutableDictionary *parameters=[NSMutableDictionary new];for(NSString *key in @[@"reasoning_effort",@"reasoning",@"thinking",@"enable_thinking"])if(body[key])parameters[key]=body[key];id generation=body[@"generationConfig"];if([generation isKindOfClass:NSDictionary.class]&&generation[@"thinkingConfig"])parameters[@"thinkingConfig"]=generation[@"thinkingConfig"];
+ NSMutableDictionary *parameters=[NSMutableDictionary new];for(NSString *key in @[@"reasoning_effort",@"reasoning",@"thinking",@"enable_thinking",@"thinking_budget",@"chat_template_kwargs",@"output_config"])if(body[key])parameters[key]=body[key];id generation=body[@"generationConfig"];if([generation isKindOfClass:NSDictionary.class]&&generation[@"thinkingConfig"])parameters[@"thinkingConfig"]=generation[@"thinkingConfig"];
  NSData *data=[NSJSONSerialization dataWithJSONObject:parameters options:NSJSONWritingSortedKeys error:nil];NSString *json=[[NSString alloc]initWithData:data encoding:NSUTF8StringEncoding]?:@"{}";
  return [NSString stringWithFormat:@"%@；实际发送：%@",TFAIThinkingConfiguration(c)[@"source"],json];
 }
@@ -82,8 +110,8 @@ static NSDictionary *TFAIGeminiRequest(NSArray *messages,NSDictionary *c,NSArray
  else if(!native){if(text.length)[parts addObject:@{@"text":text}];for(NSDictionary *im in m[@"images"]){NSString *data=Str(im[@"data"]),*mime=Str(im[@"mime"]);bytes+=data.length;if(![@[@"image/png",@"image/jpeg",@"image/webp",@"image/gif"] containsObject:mime]||![[NSData alloc]initWithBase64EncodedString:data options:0]||bytes>12*1024*1024){if(error)*error=TFAIError(4,@"图片格式或编码大小无效");return nil;}[parts addObject:@{@"inlineData":@{@"mimeType":mime,@"data":data}}];}for(NSDictionary *call in m[@"tool_calls"]){NSString *name=Str(call[@"name"]);if(!name.length||![call[@"arguments"] isKindOfClass:NSDictionary.class]){if(error)*error=TFAIError(30,@"工具调用格式有误");return nil;}[parts addObject:@{@"functionCall":@{@"name":name,@"args":call[@"arguments"]}}];}}
  if(!parts.count)continue;NSString *wireRole=[role isEqual:@"assistant"]?@"model":@"user";NSMutableDictionary *last=contents.lastObject;if([last[@"role"] isEqual:wireRole])[(NSMutableArray *)last[@"parts"] addObjectsFromArray:parts];else[contents addObject:[@{@"role":wireRole,@"parts":parts} mutableCopy]];
  }
- NSMutableDictionary *body=[@{@"contents":contents,@"generationConfig":[@{@"maxOutputTokens":@4096} mutableCopy]} mutableCopy];if(system.count)body[@"systemInstruction"]=@{@"parts":system};NSString *effort=Str(c[@"reasoningEffort"]);if(effort.length&&![effort isEqual:@"auto"]){if(![[TFAIReasoningOptions(c) valueForKey:@"id"] containsObject:effort]){if(error)*error=TFAIError(5,@"当前 Gemini 模型未声明此思考档位，请恢复默认");return nil;}if([Str(c[@"model"]) containsString:@"2.5"])body[@"generationConfig"][@"thinkingConfig"]=@{@"thinkingBudget":[effort isEqual:@"low"]?@1024:[effort isEqual:@"medium"]?@4096:@8192,@"includeThoughts":@YES};else body[@"generationConfig"][@"thinkingConfig"]=@{@"thinkingLevel":effort,@"includeThoughts":@YES};}
- if(tools.count&&(!c[@"toolsEnabled"]||[c[@"toolsEnabled"] boolValue])&&![c[@"capabilities"][@"tools"] isEqual:@"unsupported"]){NSMutableArray *functions=[NSMutableArray new];for(NSDictionary *tool in tools){NSMutableDictionary *f=[tool mutableCopy];NSDictionary *schema=f[@"parameters"];if(schema){[f removeObjectForKey:@"parameters"];f[@"parametersJsonSchema"]=schema;}[functions addObject:f];}body[@"tools"]=@[@{@"functionDeclarations":functions}];}return body;
+ NSMutableDictionary *body=[@{@"contents":contents,@"generationConfig":[@{@"maxOutputTokens":@4096} mutableCopy]} mutableCopy];if(system.count)body[@"systemInstruction"]=@{@"parts":system};NSString *effort=Str(c[@"reasoningEffort"]);if(effort.length&&![effort isEqual:@"auto"]){if(![[TFAIReasoningOptions(c) valueForKey:@"id"] containsObject:effort]){if(error)*error=TFAIError(5,@"当前 Gemini 模型未声明此思考档位，请恢复默认");return nil;}TFApplyThinking(body,c,effort);}
+ if(tools.count&&TFAIToolsAllowed(c)){NSMutableArray *functions=[NSMutableArray new];for(NSDictionary *tool in tools){NSMutableDictionary *f=[tool mutableCopy];NSDictionary *schema=f[@"parameters"];if(schema){[f removeObjectForKey:@"parameters"];f[@"parametersJsonSchema"]=schema;}[functions addObject:f];}body[@"tools"]=@[@{@"functionDeclarations":functions}];if([c[@"_probeToolName"] isEqual:@"probe_ping"])body[@"toolConfig"]=@{@"functionCallingConfig":@{@"mode":@"ANY",@"allowedFunctionNames":@[@"probe_ping"]}};}return body;
 }
 NSDictionary *TFAIRequestBody(NSArray *messages,NSDictionary *c,NSArray *tools,BOOL stream,NSError **error){
  NSString *model=Str(c[@"model"]),*original=c[@"protocol"]?:@"chat",*protocol=WireProtocol(original);if(!model.length){if(error)*error=TFAIError(3,@"请先选择或填写模型 ID");return nil;}
@@ -98,19 +126,14 @@ NSDictionary *TFAIRequestBody(NSArray *messages,NSDictionary *c,NSArray *tools,B
  if([protocol isEqual:@"responses"]){body[@"store"]=@NO;if([Str(c[@"model"]).lowercaseString hasPrefix:@"gpt-5"]||[Str(c[@"model"]).lowercaseString hasPrefix:@"o3"]||[Str(c[@"model"]).lowercaseString hasPrefix:@"o4-mini"])body[@"reasoning"]=@{@"summary":@"auto"};body[@"include"]=@[@"reasoning.encrypted_content"];body[@"max_output_tokens"]=@4096;}
  NSString *effort=Str(c[@"reasoningEffort"]);BOOL requested=effort.length&&![effort isEqual:@"auto"];if([protocol isEqual:@"anthropic"]){body[@"max_tokens"]=@4096;if(system.count)body[@"system"]=[system componentsJoinedByString:@"\n\n"];}
  if(requested){if(![[TFAIReasoningOptions(c) valueForKey:@"id"] containsObject:effort]){if(error)*error=TFAIError(5,@"此模型未声明该思考档位，请恢复默认或核对模型 ID");return nil;}
- NSString *family=model.lowercaseString.lastPathComponent;
- NSString *thinkingWire=TFAIThinkingConfiguration(c)[@"wire"];
- if([thinkingWire isEqual:@"reasoning_effort"])body[@"reasoning_effort"]=effort;
- else if([thinkingWire isEqual:@"enable_thinking"])body[@"enable_thinking"]=@YES;
- else if([thinkingWire isEqual:@"thinking"]){body[@"thinking"]=@{@"type":@"enabled"};if(![effort isEqual:@"enabled"])body[@"reasoning_effort"]=effort;}
- else if([protocol isEqual:@"responses"])body[@"reasoning"]=@{@"effort":effort,@"summary":@"auto"};
- else if([protocol isEqual:@"anthropic"]){body[@"thinking"]=@{@"type":@"enabled",@"budget_tokens":[effort isEqual:@"low"]?@1024:[effort isEqual:@"medium"]?@4096:@8192};body[@"max_tokens"]=@16384;}
- else if([original isEqual:@"openrouter"])body[@"reasoning"]=@{@"effort":effort};
- else if([family hasPrefix:@"deepseek"]||[original isEqual:@"deepseek"]){body[@"thinking"]=@{@"type":@"enabled"};if(![effort isEqual:@"enabled"])body[@"reasoning_effort"]=effort;}
- else if([effort isEqual:@"enabled"]){body[@"enable_thinking"]=@YES;}
- else body[@"reasoning_effort"]=effort;
+ TFApplyThinking(body,c,effort);
  }
- if(tools.count&&(!c[@"toolsEnabled"]||[c[@"toolsEnabled"] boolValue])&&![c[@"capabilities"][@"tools"] isEqual:@"unsupported"]){NSMutableArray *encoded=[NSMutableArray new];for(NSDictionary *tool in tools){if([protocol isEqual:@"chat"])[encoded addObject:@{@"type":@"function",@"function":tool}];else if([protocol isEqual:@"responses"]){NSMutableDictionary *f=[tool mutableCopy];f[@"type"]=@"function";f[@"strict"]=@NO;[encoded addObject:f];}else [encoded addObject:@{@"name":tool[@"name"]?:@"",@"description":tool[@"description"]?:@"",@"input_schema":tool[@"parameters"]?:@{@"type":@"object"}}];}body[@"tools"]=encoded;}
+ if(tools.count&&TFAIToolsAllowed(c)){NSMutableArray *encoded=[NSMutableArray new];for(NSDictionary *tool in tools){if([protocol isEqual:@"chat"])[encoded addObject:@{@"type":@"function",@"function":tool}];else if([protocol isEqual:@"responses"]){NSMutableDictionary *f=[tool mutableCopy];f[@"type"]=@"function";f[@"strict"]=@NO;[encoded addObject:f];}else [encoded addObject:@{@"name":tool[@"name"]?:@"",@"description":tool[@"description"]?:@"",@"input_schema":tool[@"parameters"]?:@{@"type":@"object"}}];}body[@"tools"]=encoded;if([c[@"_probeToolName"] isEqual:@"probe_ping"]){body[@"tool_choice"]=[protocol isEqual:@"chat"]?@{@"type":@"function",@"function":@{@"name":@"probe_ping"}}:[protocol isEqual:@"responses"]?@{@"type":@"function",@"name":@"probe_ping"}:@{@"type":@"tool",@"name":@"probe_ping"};}}
+ if([protocol isEqual:@"anthropic"]&&[NSUserDefaults.standardUserDefaults boolForKey:@"Dylix.AI.AnthropicCache"]&&[[NSURL URLWithString:Str(c[@"baseURL"])].host.lowercaseString isEqual:@"api.anthropic.com"]&&!c[@"_probeToolName"]&&system.count){
+  NSMutableArray *blocks=[NSMutableArray new];BOOL marked=NO;
+  for(NSString *text in system){NSRange snapshot=[text rangeOfString:@"【本轮环境快照】"];if(!marked&&snapshot.location!=NSNotFound&&snapshot.location>0){[blocks addObject:@{@"type":@"text",@"text":[text substringToIndex:snapshot.location],@"cache_control":@{@"type":@"ephemeral"}}];[blocks addObject:@{@"type":@"text",@"text":[text substringFromIndex:snapshot.location]}];marked=YES;}else if(text.length)[blocks addObject:@{@"type":@"text",@"text":text}];}
+  if(!marked&&blocks.count){NSMutableDictionary *last=[blocks.lastObject mutableCopy];last[@"cache_control"]=@{@"type":@"ephemeral"};blocks[blocks.count-1]=last;}if(blocks.count)body[@"system"]=blocks;
+ }
  return body;
 }
 @interface TFAIStreamDecoder ()

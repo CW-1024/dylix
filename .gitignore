@@ -19,3 +19,7 @@ __pycache__/
 /Plugins/FLEX/packages/
 /Plugins/FLEX/*.deb
 /Plugins/FLEX/*.dylib
+
+# Download-only optional payloads (pinned in Resources/DownloadResources.json)
+/Resources/iSH/developer-tools.tar
+/Resources/iSH/reverse-tools.tar

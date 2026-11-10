@@ -62,4 +62,5 @@ static NSString *Fingerprint(NSDictionary *plan){if(![NSJSONSerialization isVali
 - (BOOL)consumeReviewedPlan:(NSDictionary *)plan error:(NSError **)error{@synchronized(self){NSString *hash=Fingerprint(plan);NSNumber *expiry=hash?self.grants[hash]:nil;if(hash)[self.grants removeObjectForKey:hash];if(!expiry||expiry.doubleValue<=NSDate.date.timeIntervalSince1970)return Fail(error,@"批准不存在、已使用或已过期，请重新预览");NSDictionary *decision=[self decisionForPlan:plan];if([decision[@"decision"] isEqual:@"denied"]||[decision[@"separateConfirmation"] boolValue])return Fail(error,decision[@"reason"]);return YES;}}
 - (void)clearReviewedPlans{@synchronized(self){[self.grants removeAllObjects];}}
 - (void)revoke{@synchronized(self){self.revoked=YES;self.expiresAt=0;[self.grants removeAllObjects];}}
+- (BOOL)allowsSessionTerminalAutomation{@synchronized(self){BOOL directory=NO;return !self.revoked&&FullPreset(self.preset)&&self.root.length>0&&self.projectID.length>0&&self.sessionID.length>0&&[NSFileManager.defaultManager fileExistsAtPath:self.root isDirectory:&directory]&&directory&&[self.root.stringByResolvingSymlinksInPath isEqual:self.root];}}
 @end

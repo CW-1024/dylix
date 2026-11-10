@@ -1,3 +1,5 @@
+#import "AI/Resources/DXAppUpdate.h"
+#import "AI/Backup/DXBackup.h"
 #import "AI/Agent/TFAIBuildCheckpoint.h"
 #import "AI/Agent/TFAIBuildQueue.h"
 #import "AI/Background/TFScreenAwake.h"
@@ -858,13 +860,30 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
 #endif
 @interface AppDelegate : UIResponder <UIApplicationDelegate>
 @property(nonatomic) UIWindow *window;
+@property(nonatomic) BOOL restoringData;
+@property(nonatomic) NSURL *pendingRestoreURL;
 @end
 @implementation AppDelegate
 - (void)openBuildQueueFromNotification:(NSNotification *)note{UIViewController *root=self.window.rootViewController;if(root.presentedViewController)return;if([root isKindOfClass:UITabBarController.class])root=[(UITabBarController *)root selectedViewController];if([root isKindOfClass:UINavigationController.class])[(UINavigationController *)root pushViewController:TFAIBuildQueueController() animated:YES];}
 - (void)openAIFromNotification:(NSNotification *)note{TMCOpenAIConversation(self.window.rootViewController,note.userInfo[@"sessionID"],note.userInfo[@"projectID"]);}
-- (BOOL)application:(UIApplication *)app openURL:(NSURL *)url options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options {if(url.isFileURL){TFIncomingReceive(self.window.rootViewController,url);return YES;}if(([url.scheme isEqual:@"tweakforge"]||[url.scheme isEqual:@"dylix"])&&[url.host isEqual:@"ai"]){TMCOpenAIConversation(self.window.rootViewController,nil,nil);return YES;}if(([url.scheme isEqual:@"tweakforge"]||[url.scheme isEqual:@"dylix"])&&[url.host isEqual:@"incoming"]){TFIncomingDrain(self.window.rootViewController);return YES;}return NO;}
-- (void)applicationDidBecomeActive:(UIApplication *)application {TFIncomingDrain(self.window.rootViewController);}
+- (BOOL)application:(UIApplication *)app openURL:(NSURL *)url options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options {if(self.restoringData){self.pendingRestoreURL=url;return YES;}if(url.isFileURL){TFIncomingReceive(self.window.rootViewController,url);return YES;}if(([url.scheme isEqual:@"tweakforge"]||[url.scheme isEqual:@"dylix"])&&[url.host isEqual:@"ai"]){TMCOpenAIConversation(self.window.rootViewController,nil,nil);return YES;}if(([url.scheme isEqual:@"tweakforge"]||[url.scheme isEqual:@"dylix"])&&[url.host isEqual:@"incoming"]){TFIncomingDrain(self.window.rootViewController);return YES;}return NO;}
+- (void)applicationDidBecomeActive:(UIApplication *)application {if(!self.restoringData)TFIncomingDrain(self.window.rootViewController);}
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)options {
+    NSString *pending=[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/DylixRestore/pending.json"];
+    if(![NSFileManager.defaultManager fileExistsAtPath:pending])return [self finishLaunching:options];
+    self.restoringData=YES;
+    // Return to UIKit immediately: large restores must not trigger the launch watchdog.
+    self.window=[[UIWindow alloc]initWithFrame:UIScreen.mainScreen.bounds];
+    UIViewController *loading=[UIViewController new];loading.view.backgroundColor=UIColor.systemBackgroundColor;
+    UILabel *label=[UILabel new];label.text=@"正在恢复 Dylix 数据，请勿关闭应用";label.font=[UIFont preferredFontForTextStyle:UIFontTextStyleBody];label.translatesAutoresizingMaskIntoConstraints=NO;
+    UIActivityIndicatorView *spinner=[[UIActivityIndicatorView alloc]initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];spinner.translatesAutoresizingMaskIntoConstraints=NO;[spinner startAnimating];
+    [loading.view addSubview:label];[loading.view addSubview:spinner];
+    [NSLayoutConstraint activateConstraints:@[[label.centerXAnchor constraintEqualToAnchor:loading.view.centerXAnchor],[label.centerYAnchor constraintEqualToAnchor:loading.view.centerYAnchor],[spinner.centerXAnchor constraintEqualToAnchor:loading.view.centerXAnchor],[spinner.bottomAnchor constraintEqualToAnchor:label.topAnchor constant:-20]]];
+    self.window.rootViewController=loading;[self.window makeKeyAndVisible];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{NSError *error=nil;DXBackupApplyPending(NSHomeDirectory(),&error);dispatch_async(dispatch_get_main_queue(),^{self.restoringData=NO;NSMutableDictionary *launch=[options mutableCopy]?:[NSMutableDictionary new];if(self.pendingRestoreURL)launch[UIApplicationLaunchOptionsURLKey]=self.pendingRestoreURL;self.pendingRestoreURL=nil;[self finishLaunching:launch];if(error){UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"数据恢复未完成" message:error.localizedDescription preferredStyle:UIAlertControllerStyleAlert];[alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];[self.window.rootViewController presentViewController:alert animated:YES completion:nil];}});});
+    return YES;
+}
+- (BOOL)finishLaunching:(NSDictionary *)options {
     [DXRemoteService shared];
     TFAIBackgroundRegister();TFAINotificationsRegister();[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(openBuildQueueFromNotification:) name:@"TFAIOpenBuildQueue" object:nil];[NSNotificationCenter.defaultCenter addObserver:self selector:@selector(openAIFromNotification:) name:@"TFAIOpenConversation" object:nil];
     [NSUserDefaults.standardUserDefaults registerDefaults:@{@"StudioTheme":@1, @"StudioFont":@14, @"StudioSDKVersion":@"16.4", @"StudioDeploymentTarget":@"15.0"}];
@@ -881,6 +900,9 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
     extern UIViewController *DXIntegration165Controller(void);
     if([NSProcessInfo.processInfo.arguments containsObject:@"--integration165-tests"])self.window.rootViewController=[[TMCNavigationController alloc]initWithRootViewController:DXIntegration165Controller()];
 #endif
+    if([NSProcessInfo.processInfo.arguments containsObject:@"--session239"]){extern UIViewController *TMCSessionArchive239Regression(void);self.window.rootViewController=TMCSessionArchive239Regression();}
+    if([NSProcessInfo.processInfo.arguments containsObject:@"--data-settings237"]){extern UIViewController *TMCData237SettingsRegression(void);self.window.rootViewController=TMCData237SettingsRegression();}
+    if([NSProcessInfo.processInfo.arguments containsObject:@"--ui235-tests"]){extern UIViewController *TMCChatNavigation235Regression(void);self.window.rootViewController=TMCChatNavigation235Regression();}
     extern UIViewController *TFAIAgent163Regression(void);
     extern UIViewController *TFAIToolRegistry164Regression(void);
     if([NSProcessInfo.processInfo.arguments containsObject:@"--registry164-tests"])self.window.rootViewController=[[TMCNavigationController alloc]initWithRootViewController:TFAIToolRegistry164Regression()];
@@ -950,6 +972,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         self.window.rootViewController=[[TMCNavigationController alloc] initWithRootViewController:TMCStudioEditorRegression()];
 #endif
     [self.window makeKeyAndVisible];
+    DXAppUpdateOnLaunch(self.window.rootViewController);
     NSURL *incoming=options[UIApplicationLaunchOptionsURLKey];if(incoming)dispatch_async(dispatch_get_main_queue(),^{TFIncomingReceive(self.window.rootViewController,incoming);});
     return YES;
 }
