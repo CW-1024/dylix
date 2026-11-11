@@ -4,8 +4,10 @@
 #include "RequestOptimization252UI.inc"
 #include "SettingsTools253UI.inc"
 #include "Tools255UI.inc"
+#include "SettingsRelease254UI.inc"
 UIViewController *TMCData237SettingsRegression(void){
  if([NSProcessInfo.processInfo.arguments containsObject:@"--tools255"])return TMCTools255UI();
+ if([NSProcessInfo.processInfo.arguments containsObject:@"--settings254"])return TMCSettingsRelease254UI();
  if([NSProcessInfo.processInfo.arguments containsObject:@"--settings253"])return TMCSettingsTools253UI();
  if([NSProcessInfo.processInfo.arguments containsObject:@"--optimization252"])return TMCOptimization252UI();
  if([NSProcessInfo.processInfo.arguments containsObject:@"--continuity251"])return TMCContinuity251UI();

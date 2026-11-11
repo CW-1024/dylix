@@ -19,32 +19,64 @@ NSString *TFAIThinkingScope(NSDictionary *c){
  NSData *data=[NSJSONSerialization dataWithJSONObject:@[c[@"protocol"]?:@"chat",endpoint.absoluteString,c[@"model"]?:@""] options:0 error:nil];return [[NSString alloc]initWithData:data encoding:NSUTF8StringEncoding]?:@"";
 }
 NSDictionary *TFAIThinkingConfiguration(NSDictionary *c){
- NSArray *options=TFAIFamilyReasoningOptions(c);NSString *source=@"模型族建议 · 尚未验证当前服务";
  NSString *protocol=WireProtocol(c[@"protocol"]?:@"chat"),*model=TFAINormalizedModelID(c[@"model"]),*host=[NSURL URLWithString:c[@"baseURL"]?:@""].host.lowercaseString?:@"";
- NSString *wire=@"reasoning_effort";
- if([protocol isEqual:@"responses"]||[c[@"protocol"] isEqual:@"openrouter"]||[host isEqual:@"openrouter.ai"])wire=@"reasoning";
+ NSArray *family=TFAIFamilyReasoningOptions(c),*levels=[family valueForKey:@"id"];
+ NSMutableArray *familyLevels=[levels mutableCopy];[familyLevels removeObject:@"auto"];levels=familyLevels;
+ NSString *source=@"模型族建议 · 尚未验证当前服务",*wire=@"reasoning_effort";
+ if([protocol isEqual:@"responses"]||([protocol isEqual:@"chat"]&&([c[@"protocol"] isEqual:@"openrouter"]||[host isEqual:@"openrouter.ai"])))wire=@"reasoning";
  else if([protocol isEqual:@"anthropic"]){BOOL adaptive=[model rangeOfString:@"^claude-(?:(?:opus|sonnet)-4-[6-9]|(?:opus|sonnet)-[5-9])" options:NSRegularExpressionSearch].location!=NSNotFound;wire=adaptive?@"anthropic_adaptive":@"anthropic_budget";}
  else if([protocol isEqual:@"gemini"])wire=[model hasPrefix:@"gemini-2.5"]?@"gemini_budget":@"gemini_level";
+ else if([host isEqual:@"api.cerebras.ai"]||[host hasSuffix:@".services.ai.azure.com"]||[host isEqual:@"api.venice.ai"]||[host isEqual:@"ark.cn-beijing.volces.com"])wire=@"reasoning_effort";
  else if([host isEqual:@"api.siliconflow.cn"]||[host isEqual:@"api.siliconflow.com"]||[c[@"protocol"] isEqual:@"siliconflow"]){if([model rangeOfString:@"^(deepseek|qwen|glm|kimi|moonshot)" options:NSRegularExpressionSearch].location!=NSNotFound)wire=@"enable_thinking";}
- else if([model hasPrefix:@"deepseek"]||[c[@"protocol"] isEqual:@"deepseek"]||[model hasPrefix:@"glm-"]||[model hasPrefix:@"kimi-k2.5"])wire=@"thinking";
+ else if([model hasPrefix:@"deepseek"]||[c[@"protocol"] isEqual:@"deepseek"]||[model hasPrefix:@"glm-"]||[model hasPrefix:@"kimi-"]||[model hasPrefix:@"minimax-"]||[model hasPrefix:@"mimo-"])wire=@"thinking";
  else if([model hasPrefix:@"qwen"])wire=@"enable_thinking";
- if([@[@"enable_thinking",@"chat_template_kwargs"] containsObject:wire]&&options.count>1)options=@[@{@"id":@"auto",@"name":@"默认"},@{@"id":@"enabled",@"name":@"开启思考"}];
- NSDictionary *metadata=TFAIModelMetadata(c);NSArray *levels=metadata[@"efforts"];NSString *declaredWire=metadata[@"thinkingWire"];
+ NSDictionary *metadata=TFAIModelMetadata(c),*catalog=TFAICatalogModelMetadata(c);
+ NSString *declaredWire=metadata[@"thinkingWire"],*control=metadata[@"reasoningControl"];
  if([TFAIThinkingWires(c[@"protocol"]) containsObject:declaredWire?:@""])wire=declaredWire;
- BOOL explicitlyOff=[metadata[@"capabilities"][@"thinking"] isEqual:@"unsupported"];
- if(levels.count||explicitlyOff){source=@"当前服务模型列表声明 · 尚未验证参数是否生效";options=@[@{@"id":@"auto",@"name":@"默认"}];}
- NSDictionary *map=[c[@"thinkingOverrides"] isKindOfClass:NSDictionary.class]?c[@"thinkingOverrides"]:@{};id raw=map[TFAIThinkingScope(c)];NSDictionary *override=[raw isKindOfClass:NSDictionary.class]?raw:nil;
- BOOL manual=override&&[TFAIThinkingWires(c[@"protocol"]) containsObject:override[@"wire"]?:@""];
- if(manual){wire=override[@"wire"];levels=[override[@"levels"] isKindOfClass:NSArray.class]?override[@"levels"]:@[];source=@"当前连接手动配置 · 仅作用于此端点、协议与模型";options=@[@{@"id":@"auto",@"name":@"默认"}];}
- if((levels.count&&!explicitlyOff)||manual){NSMutableArray *valid=[NSMutableArray arrayWithObject:@{@"id":@"auto",@"name":@"默认"}];NSDictionary *names=@{@"none":@"关闭思考",@"minimal":@"最少",@"low":@"轻",@"medium":@"中",@"high":@"高",@"xhigh":@"极高",@"ultra":@"Ultra",@"max":@"最高",@"enabled":@"开启思考"};
-  for(id level in levels){if(![level isKindOfClass:NSString.class]||!names[level]||[[valid valueForKey:@"id"] containsObject:level]||![TFAIThinkingLevelsForWire(wire) containsObject:level])continue;
-   BOOL toggle=[@[@"enable_thinking",@"chat_template_kwargs"] containsObject:wire];if(toggle&&![level isEqual:@"enabled"]&&![level isEqual:@"none"])continue;
-   if([level isEqual:@"none"]&&![@[@"reasoning_effort",@"reasoning",@"enable_thinking",@"chat_template_kwargs",@"thinking"] containsObject:wire])continue;
-   [valid addObject:@{@"id":level,@"name":names[level]}];}
-  options=valid;
+ NSString *declaredThinking=metadata[@"capabilities"][@"thinking"];
+ BOOL explicitlyOff=[declaredThinking isEqual:@"unsupported"];
+ BOOL fixed=[control isEqual:@"fixed"];
+ if([metadata[@"efforts"] count]){levels=metadata[@"efforts"];source=@"当前服务声明的思考档位 · 测试不是启用条件";}
+ else if(control||declaredWire||declaredThinking){source=@"当前服务模型列表声明 · 尚未实测";}
+ else {
+  if([catalog[@"efforts"] count]){levels=catalog[@"efforts"];source=catalog[@"source"];}
+  if([catalog[@"authoritative"] boolValue]){
+   control=catalog[@"reasoningControl"];fixed=[control isEqual:@"fixed"];
+   explicitlyOff=[catalog[@"capabilities"][@"thinking"] isEqual:@"unsupported"];
+   if(control||explicitlyOff)source=catalog[@"source"];
+  }
  }
- if(options.count==1&&!manual&&!levels.count)source=explicitlyOff?@"服务声明不支持思考，可手动覆写":@"尚未识别可调档位，可在模型能力中手动适配";
- return @{@"options":options,@"source":source,@"wire":wire,@"scope":TFAIThinkingScope(c)};
+ // Known fixed-reasoning models do not gain an invented effort dial. A relay's
+ // explicit declaration or manual adapter may still override this family hint.
+ if(!declaredThinking&&!declaredWire&&![metadata[@"efforts"] count]&&[model rangeOfString:@"^(?:deepseek-reasoner|deepseek-r1)(?:$|-)" options:NSRegularExpressionSearch].location!=NSNotFound)fixed=YES;
+ NSDictionary *map=[c[@"thinkingOverrides"] isKindOfClass:NSDictionary.class]?c[@"thinkingOverrides"]:@{};
+ id raw=map[TFAIThinkingScope(c)];NSDictionary *override=[raw isKindOfClass:NSDictionary.class]?raw:nil;
+ BOOL manual=override&&[TFAIThinkingWires(c[@"protocol"]) containsObject:override[@"wire"]?:@""];
+ if(manual){wire=override[@"wire"];levels=[override[@"levels"] isKindOfClass:NSArray.class]?override[@"levels"]:@[];source=@"当前连接手动配置 · 仅作用于此端点、协议与模型";explicitlyOff=NO;fixed=NO;}
+ else if(explicitlyOff||fixed){levels=@[];source=explicitlyOff?@"当前服务或目录声明不支持思考，可手动适配":@"模型自行思考，未声明可调档位；可手动适配";}
+ else {
+  BOOL toggle=[@[@"enable_thinking",@"chat_template_kwargs"] containsObject:wire];
+  BOOL enabledOnly=[levels containsObject:@"enabled"]||[familyLevels containsObject:@"enabled"];
+  if(toggle&&(levels.count||[declaredThinking isEqual:@"supported"]||[control isEqual:@"toggle"]))levels=@[@"none",@"enabled"];
+  else if([wire isEqual:@"thinking"]&&([control isEqual:@"toggle"]||enabledOnly))levels=@[@"none",@"enabled"];
+  // A hybrid thinking.type switch remains usable even when the catalog also
+  // supplies effort tiers. "enabled" emits only the switch, not a fake effort.
+  if([wire isEqual:@"thinking"]&&(enabledOnly||[declaredWire isEqual:@"thinking"]||[control isEqual:@"toggle"])){NSMutableOrderedSet *choices=[NSMutableOrderedSet orderedSetWithArray:levels];[choices addObject:@"none"];[choices addObject:@"enabled"];levels=choices.array;}
+  if(!levels.count){
+   if([wire isEqual:@"thinking"])levels=@[@"none",@"enabled"];
+   else if(toggle)levels=@[@"none",@"enabled"];
+   else levels=@[@"low",@"medium",@"high"];
+   source=[declaredThinking isEqual:@"supported"]?@"服务声明支持思考 · 按协议提供兼容控制，未实测":@"协议兼容选项 · 能力未声明，按需尝试；默认不发送参数";
+  }
+ }
+ NSDictionary *names=@{@"none":@"关闭思考",@"minimal":@"最少",@"low":@"轻",@"medium":@"中",@"high":@"高",@"xhigh":@"极高",@"ultra":@"Ultra",@"max":@"最高",@"enabled":@"开启思考"};
+ NSMutableArray *options=[NSMutableArray arrayWithObject:@{@"id":@"auto",@"name":@"默认"}];
+ for(NSString *level in @[@"none",@"minimal",@"low",@"medium",@"high",@"xhigh",@"ultra",@"max",@"enabled"]){
+  if(![levels containsObject:level]||![TFAIThinkingLevelsForWire(wire) containsObject:level])continue;
+  [options addObject:@{@"id":level,@"name":names[level]}];
+ }
+ if([wire isEqual:@"disabled"])source=@"手动关闭思考参数 · 使用服务默认行为";
+ return @{@"options":options,@"source":source,@"wire":wire,@"scope":TFAIThinkingScope(c),@"manual":@(manual)};
 }
 static void TFApplyThinking(NSMutableDictionary *body,NSDictionary *c,NSString *effort){
  NSString *wire=TFAIThinkingConfiguration(c)[@"wire"];BOOL off=[effort isEqual:@"none"];
@@ -110,11 +142,12 @@ static NSDictionary *TFAIGeminiRequest(NSArray *messages,NSDictionary *c,NSArray
  else if(!native){if(text.length)[parts addObject:@{@"text":text}];for(NSDictionary *im in m[@"images"]){NSString *data=Str(im[@"data"]),*mime=Str(im[@"mime"]);bytes+=data.length;if(![@[@"image/png",@"image/jpeg",@"image/webp",@"image/gif"] containsObject:mime]||![[NSData alloc]initWithBase64EncodedString:data options:0]||bytes>12*1024*1024){if(error)*error=TFAIError(4,@"图片格式或编码大小无效");return nil;}[parts addObject:@{@"inlineData":@{@"mimeType":mime,@"data":data}}];}for(NSDictionary *call in m[@"tool_calls"]){NSString *name=Str(call[@"name"]);if(!name.length||![call[@"arguments"] isKindOfClass:NSDictionary.class]){if(error)*error=TFAIError(30,@"工具调用格式有误");return nil;}[parts addObject:@{@"functionCall":@{@"name":name,@"args":call[@"arguments"]}}];}}
  if(!parts.count)continue;NSString *wireRole=[role isEqual:@"assistant"]?@"model":@"user";NSMutableDictionary *last=contents.lastObject;if([last[@"role"] isEqual:wireRole])[(NSMutableArray *)last[@"parts"] addObjectsFromArray:parts];else[contents addObject:[@{@"role":wireRole,@"parts":parts} mutableCopy]];
  }
- NSMutableDictionary *body=[@{@"contents":contents,@"generationConfig":[@{@"maxOutputTokens":@4096} mutableCopy]} mutableCopy];if(system.count)body[@"systemInstruction"]=@{@"parts":system};NSString *effort=Str(c[@"reasoningEffort"]);if(effort.length&&![effort isEqual:@"auto"]){if(![[TFAIReasoningOptions(c) valueForKey:@"id"] containsObject:effort]){if(error)*error=TFAIError(5,@"当前 Gemini 模型未声明此思考档位，请恢复默认");return nil;}TFApplyThinking(body,c,effort);}
+ NSMutableDictionary *body=[@{@"contents":contents,@"generationConfig":[@{@"maxOutputTokens":@4096} mutableCopy]} mutableCopy];if(system.count)body[@"systemInstruction"]=@{@"parts":system};NSString *effort=Str(c[@"reasoningEffort"]);if(effort.length&&![effort isEqual:@"auto"]){if(![[TFAIReasoningOptions(c) valueForKey:@"id"] containsObject:effort]){if(error)*error=TFAIError(5,@"当前 Gemini 适配不包含所选思考档位，请刷新档位或调整接口");return nil;}TFApplyThinking(body,c,effort);}
  if(tools.count&&TFAIToolsAllowed(c)){NSMutableArray *functions=[NSMutableArray new];for(NSDictionary *tool in tools){NSMutableDictionary *f=[tool mutableCopy];NSDictionary *schema=f[@"parameters"];if(schema){[f removeObjectForKey:@"parameters"];f[@"parametersJsonSchema"]=schema;}[functions addObject:f];}body[@"tools"]=@[@{@"functionDeclarations":functions}];if([c[@"_probeToolName"] isEqual:@"probe_ping"])body[@"toolConfig"]=@{@"functionCallingConfig":@{@"mode":@"ANY",@"allowedFunctionNames":@[@"probe_ping"]}};}return body;
 }
 NSDictionary *TFAIRequestBody(NSArray *messages,NSDictionary *c,NSArray *tools,BOOL stream,NSError **error){
  NSString *model=Str(c[@"model"]),*original=c[@"protocol"]?:@"chat",*protocol=WireProtocol(original);if(!model.length){if(error)*error=TFAIError(3,@"请先选择或填写模型 ID");return nil;}
+ if(!TFAIImagesAllowed(c))for(NSDictionary *message in messages)if([message[@"images"] count]){if(error)*error=TFAIError(32,@"当前模型已禁用图片，或当前服务声明不支持图片。请在模型能力中调整配置或选择支持图片的模型；原图片与会话保留。");return nil;}
  if([protocol isEqual:@"gemini"])return TFAIGeminiRequest(messages,c,tools,error);NSMutableDictionary *body=[@{@"model":model,@"stream":@(stream)} mutableCopy];if([protocol isEqual:@"chat"]&&stream&&![c[@"omitStreamUsage"] boolValue])body[@"stream_options"]=@{@"include_usage":@YES};NSMutableArray *out=[NSMutableArray new];NSMutableArray *system=[NSMutableArray new];NSUInteger imageBytes=0;
  for(id entry in messages){if(![entry isKindOfClass:NSDictionary.class])continue;NSDictionary *m=entry;NSString *role=Str(m[@"role"]),*text=Str(m[@"content"]);if(![@[@"system",@"user",@"assistant",@"tool"] containsObject:role])continue;NSArray *calls=[m[@"tool_calls"] isKindOfClass:NSArray.class]?m[@"tool_calls"]:@[];NSMutableArray *images=[NSMutableArray new];
   for(id item in ([m[@"images"] isKindOfClass:NSArray.class]?m[@"images"]:@[])){if(![item isKindOfClass:NSDictionary.class])continue;NSString *data=Str(item[@"data"]),*mime=Str(item[@"mime"]);if(![@[@"image/png",@"image/jpeg",@"image/webp",@"image/gif"] containsObject:mime]||!data.length||![[NSData alloc]initWithBase64EncodedString:data options:0]){if(error)*error=TFAIError(4,@"图片附件格式无效");return nil;}imageBytes+=data.length;if(imageBytes>12*1024*1024){if(error)*error=TFAIError(4,@"图片附件超过 12 MB 编码上限，请减少图片");return nil;}[images addObject:@{@"data":data,@"mime":mime}];}
@@ -125,7 +158,7 @@ NSDictionary *TFAIRequestBody(NSArray *messages,NSDictionary *c,NSArray *tools,B
  body[[protocol isEqual:@"responses"]?@"input":@"messages"]=out;
  if([protocol isEqual:@"responses"]){body[@"store"]=@NO;if([Str(c[@"model"]).lowercaseString hasPrefix:@"gpt-5"]||[Str(c[@"model"]).lowercaseString hasPrefix:@"o3"]||[Str(c[@"model"]).lowercaseString hasPrefix:@"o4-mini"])body[@"reasoning"]=@{@"summary":@"auto"};body[@"include"]=@[@"reasoning.encrypted_content"];body[@"max_output_tokens"]=@4096;}
  NSString *effort=Str(c[@"reasoningEffort"]);BOOL requested=effort.length&&![effort isEqual:@"auto"];if([protocol isEqual:@"anthropic"]){body[@"max_tokens"]=@4096;if(system.count)body[@"system"]=[system componentsJoinedByString:@"\n\n"];}
- if(requested){if(![[TFAIReasoningOptions(c) valueForKey:@"id"] containsObject:effort]){if(error)*error=TFAIError(5,@"此模型未声明该思考档位，请恢复默认或核对模型 ID");return nil;}
+ if(requested){if(![[TFAIReasoningOptions(c) valueForKey:@"id"] containsObject:effort]){if(error)*error=TFAIError(5,@"当前适配不包含所选思考档位，请刷新档位或在模型能力中调整接口");return nil;}
  TFApplyThinking(body,c,effort);
  }
  if(tools.count&&TFAIToolsAllowed(c)){NSMutableArray *encoded=[NSMutableArray new];for(NSDictionary *tool in tools){if([protocol isEqual:@"chat"])[encoded addObject:@{@"type":@"function",@"function":tool}];else if([protocol isEqual:@"responses"]){NSMutableDictionary *f=[tool mutableCopy];f[@"type"]=@"function";f[@"strict"]=@NO;[encoded addObject:f];}else [encoded addObject:@{@"name":tool[@"name"]?:@"",@"description":tool[@"description"]?:@"",@"input_schema":tool[@"parameters"]?:@{@"type":@"object"}}];}body[@"tools"]=encoded;if([c[@"_probeToolName"] isEqual:@"probe_ping"]){body[@"tool_choice"]=[protocol isEqual:@"chat"]?@{@"type":@"function",@"function":@{@"name":@"probe_ping"}}:[protocol isEqual:@"responses"]?@{@"type":@"function",@"name":@"probe_ping"}:@{@"type":@"tool",@"name":@"probe_ping"};}}

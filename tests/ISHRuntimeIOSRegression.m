@@ -74,6 +74,7 @@ static void Message(UIViewController *host,NSString *title,NSString *text){}
 @property uint64_t installOffset;
 @end
 #import "../App/AI/Backup/DXBackup.h"
+#import "../App/AI/Backup/DXBackupTask.h"
 #import "../App/AI/Sandbox/TFAIISHHub.h"
 #import "../App/GitPreferences.h"
 BOOL TMCBuildIsRunning(void){return NO;}
@@ -83,6 +84,9 @@ BOOL TFAIHasLiveRuns(void){return NO;}
 + (BOOL)hasActiveBuilds{return NO;}
 @end
 @implementation ISHProof
+#include "Terminal263IOS.inc"
+#include "Backup262IOS.inc"
+#include "SharedTools260IOS.inc"
 #include "DataWorkflows237IOS.inc"
 #include "OptionalResources247IOS.inc"
 #include "Packages253IOS.inc"
@@ -90,6 +94,10 @@ BOOL TFAIHasLiveRuns(void){return NO;}
 #include "Workspace227IOS.inc"
 - (BOOL)application:(UIApplication *)app didFinishLaunchingWithOptions:(NSDictionary *)opts{
  self.results=[NSMutableArray new];self.window=[[UIWindow alloc]initWithFrame:UIScreen.mainScreen.bounds];UIViewController *vc=[UIViewController new];vc.view.backgroundColor=UIColor.systemBackgroundColor;self.window.rootViewController=vc;[self.window makeKeyAndVisible];
+ if([NSProcessInfo.processInfo.arguments containsObject:@"--terminal263"]){[self terminal263];return YES;}
+ if([NSProcessInfo.processInfo.arguments containsObject:@"--backup262"]){[self backup262];return YES;}
+ if([NSProcessInfo.processInfo.arguments containsObject:@"--shared260"]){[self shared260];return YES;}
+ if([NSProcessInfo.processInfo.arguments containsObject:@"--shared260-check"]){[self shared260Check];return YES;}
  if([NSProcessInfo.processInfo.arguments containsObject:@"--folder-native240"]){self.window.rootViewController=[[UINavigationController alloc]initWithRootViewController:TFAIDirectoryRegistryController(@"native240")];return YES;}
  if([NSProcessInfo.processInfo.arguments containsObject:@"--share-native241"]){dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),dispatch_get_main_queue(),^{NSURL *folder=[self shareFixture241];UIActivityViewController *sheet=[[UIActivityViewController alloc]initWithActivityItems:@[folder] applicationActivities:nil];sheet.popoverPresentationController.sourceView=vc.view;sheet.popoverPresentationController.sourceRect=CGRectMake(100,100,1,1);[vc presentViewController:sheet animated:YES completion:nil];});return YES;}
  if([NSProcessInfo.processInfo.arguments containsObject:@"--packages253"]){[self packages253];return YES;}
@@ -114,10 +122,10 @@ BOOL TFAIHasLiveRuns(void){return NO;}
  [NSFileManager.defaultManager createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil];[@"---\nname: Override\ndescription: Project test\n---\nSKILL_PROJECT_ONE" writeToFile:file atomically:YES encoding:NSUTF8StringEncoding error:nil];
  [@"NEVER_EXPOSE_SCRIPT" writeToFile:[folder stringByAppendingPathComponent:@"run.sh"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
  [TFAIISHRuntime.shared configureProject:root session:@"proof-project-skills"];
- [TFAIISHRuntime.shared execute:@"cat /skills/theos-logos/SKILL.md; test ! -f /skills/theos-logos/run.sh && echo NO_SCRIPTS" session:@"proof-project-skills" timeout:20 output:nil completion:^(NSDictionary *r,NSError *e){[self record:@"skills_project_override_and_no_scripts" passed:!e&&[r[@"output"] containsString:@"SKILL_PROJECT_ONE"]&&[r[@"output"] containsString:@"NO_SCRIPTS"] detail:e.localizedDescription];
+ [TFAIISHRuntime.shared execute:@"cat $DYLIX_SKILLS_DIR/theos-logos/SKILL.md; test ! -f $DYLIX_SKILLS_DIR/theos-logos/run.sh && echo NO_SCRIPTS" session:@"proof-project-skills" timeout:20 output:nil completion:^(NSDictionary *r,NSError *e){[self record:@"skills_project_override_and_no_scripts" passed:!e&&[r[@"output"] containsString:@"SKILL_PROJECT_ONE"]&&[r[@"output"] containsString:@"NO_SCRIPTS"] detail:e.localizedDescription];
   [@"---\nname: Override\ndescription: Project test\n---\nSKILL_PROJECT_TWO" writeToFile:file atomically:YES encoding:NSUTF8StringEncoding error:nil];
-  [TFAIISHRuntime.shared execute:@"cat /skills/theos-logos/SKILL.md; if rm /skills/theos-logos/SKILL.md 2>/dev/null; then echo REMOVE_FAILED; else echo REMOVE_BLOCKED; fi" session:@"proof-project-skills" timeout:20 output:nil completion:^(NSDictionary *r,NSError *e){[self record:@"skills_hot_refresh_and_remove_blocked" passed:!e&&[r[@"output"] containsString:@"SKILL_PROJECT_TWO"]&&[r[@"output"] containsString:@"REMOVE_BLOCKED"] detail:e.localizedDescription];
-   [TFAIISHRuntime.shared execute:@"cat /skills/theos-logos/SKILL.md" session:@"proof-two" timeout:20 output:nil completion:^(NSDictionary *r,NSError *e){[self record:@"skills_project_isolated_across_sessions" passed:!e&&[r[@"output"] length]>0&&![r[@"output"] containsString:@"SKILL_PROJECT_TWO"] detail:e.localizedDescription];[self projectCopySmoke:root done:done];}];
+  [TFAIISHRuntime.shared execute:@"cat $DYLIX_SKILLS_DIR/theos-logos/SKILL.md; if rm $DYLIX_SKILLS_DIR/theos-logos/SKILL.md 2>/dev/null; then echo REMOVE_FAILED; else echo REMOVE_BLOCKED; fi" session:@"proof-project-skills" timeout:20 output:nil completion:^(NSDictionary *r,NSError *e){[self record:@"skills_hot_refresh_and_remove_blocked" passed:!e&&[r[@"output"] containsString:@"SKILL_PROJECT_TWO"]&&[r[@"output"] containsString:@"REMOVE_BLOCKED"] detail:e.localizedDescription];
+   [TFAIISHRuntime.shared execute:@"cat $DYLIX_SKILLS_DIR/theos-logos/SKILL.md" session:@"proof-two" timeout:20 output:nil completion:^(NSDictionary *r,NSError *e){[self record:@"skills_project_isolated_across_sessions" passed:!e&&[r[@"output"] length]>0&&![r[@"output"] containsString:@"SKILL_PROJECT_TWO"] detail:e.localizedDescription];[self projectCopySmoke:root done:done];}];
   }];
  }];
 }
@@ -132,7 +140,7 @@ BOOL TFAIHasLiveRuns(void){return NO;}
 }
 - (void)maintenanceSmoke{
  NSArray *args=NSProcessInfo.processInfo.arguments;BOOL seed=[args containsObject:@"--maintenance-seed"],reset=[args containsObject:@"--maintenance-reset"],restore=[args containsObject:@"--maintenance-restore"];
- NSString *session=@"proof-maintenance",*key=[TFAIAgentContext fingerprint:session],*stage=seed?@"seed":reset?@"reset":restore?@"restore":@"backup";
+ NSString *session=@"proof-maintenance",*key=TFAIISHEnvironment.sharedKey,*stage=seed?@"seed":reset?@"reset":restore?@"restore":@"backup";
  void(^run)(void)=^{NSString *command=seed?@"mkdir -p /workspace; printf ORIGINAL > /workspace/env-one; rm -f /workspace/env-two; ln /workspace/env-one /workspace/env-two; chmod 640 /workspace/env-one; echo SEEDED":reset?@"test ! -f /workspace/env-one && echo RESET_OK":restore?@"cat /workspace/env-one; cat /workspace/env-two; test $(stat -c %i /workspace/env-one) = $(stat -c %i /workspace/env-two) && echo LINKS_OK; stat -c %a /workspace/env-one":@"printf CHANGED > /workspace/env-one; echo CHANGED_OK";
  [TFAIISHRuntime.shared execute:command session:session timeout:30 output:nil completion:^(NSDictionary *r,NSError *e){NSString *text=r[@"output"];BOOL ok=!e&&[r[@"exit_code"] intValue]==0&&(seed?[text containsString:@"SEEDED"]:reset?[text containsString:@"RESET_OK"]:restore?([text containsString:@"ORIGINALORIGINAL"]&&[text containsString:@"LINKS_OK"]&&[text containsString:@"640"]):[text containsString:@"CHANGED_OK"]);[self record:[@"maintenance_" stringByAppendingString:stage] passed:ok detail:r?:e.localizedDescription];}];};
  if(seed){run();return;}
@@ -145,14 +153,14 @@ BOOL TFAIHasLiveRuns(void){return NO;}
 }
 - (void)run:(NSUInteger)i{
  NSArray *cases=@[
-  @{@"session":@"proof-one",@"command":@"test -f /skills/theos-logos/SKILL.md; ls /skills; if echo bad > /skills/WRONG 2>/dev/null; then echo WRITE_FAILED; else echo SKILLS_READ_ONLY; fi; if chmod 777 /skills 2>/dev/null; then echo CHMOD_FAILED; else echo SKILLS_CHMOD_BLOCKED; fi",@"expect":@"SKILLS_READ_ONLY",@"also":@"SKILLS_CHMOD_BLOCKED"},
+  @{@"session":@"proof-one",@"command":@"test -f $DYLIX_SKILLS_DIR/theos-logos/SKILL.md; ls $DYLIX_SKILLS_DIR; if echo bad > $DYLIX_SKILLS_DIR/WRONG 2>/dev/null; then echo WRITE_FAILED; else echo SKILLS_READ_ONLY; fi; if chmod 777 $DYLIX_SKILLS_DIR 2>/dev/null; then echo CHMOD_FAILED; else echo SKILLS_CHMOD_BLOCKED; fi",@"expect":@"SKILLS_READ_ONLY",@"also":@"SKILLS_CHMOD_BLOCKED"},
   @{@"session":@"proof-one",@"command":@"uname -m; printf 'DYLIX_REAL_LINUX\\n'; pwd",@"expect":@"aarch64"},
   @{@"session":@"proof-one",@"command":@"printf 'persisted' > /workspace/persist.txt; cat /workspace/persist.txt; exit 7",@"expect":@"persisted",@"exit":@7},
-  @{@"session":@"proof-two",@"command":@"test ! -f /workspace/persist.txt && echo SESSION_ISOLATED; cd /; cd ../../..; pwd; ln -sf /bin/sh /tmp/sh; /tmp/sh -c 'echo SYMLINK_OK'",@"expect":@"SESSION_ISOLATED",@"also":@"SYMLINK_OK"},
+  @{@"session":@"proof-two",@"command":@"test -f /workspace/persist.txt && echo ENVIRONMENT_SHARED; cd /; cd ../../..; pwd; ln -sf /bin/sh /tmp/sh; /tmp/sh -c 'echo SYMLINK_OK'",@"expect":@"ENVIRONMENT_SHARED",@"also":@"SYMLINK_OK"},
   @{@"session":@"proof-one",@"command":@"cat /workspace/persist.txt; cat /../../../../etc/alpine-release; mkdir -p /tmp/mnt; mount -t realfs / /tmp/mnt; echo MOUNT_STATUS=$?",@"expect":@"MOUNT_STATUS=1"},
   @{@"session":@"proof-one",@"command":@"printf 'before-timeout\\n'; sleep 20; echo BAD_TIMEOUT",@"expect":@"before-timeout",@"timeout":@1},
   @{@"session":@"proof-one",@"command":@"printf 'after-timeout\\n'; cat /workspace/persist.txt",@"expect":@"after-timeout"},
-  @{@"session":@"proof-two",@"command":@"ln -sf /../../sessions /tmp/escape; test ! -e /tmp/escape && test ! -d /sessions && test ! -f /workspace/persist.txt && echo NO_CROSS_SESSION",@"expect":@"NO_CROSS_SESSION"},
+  @{@"session":@"proof-two",@"command":@"ln -sf /../../sessions /tmp/escape; test ! -e /tmp/escape && test ! -d /sessions && test -f /workspace/persist.txt && echo NO_HOST_ESCAPE",@"expect":@"NO_HOST_ESCAPE"},
   @{@"session":@"proof-one",@"command":@"i=0; while [ $i -lt 8 ]; do /bin/sh -c 'printf x'; i=$((i+1)); done; printf ' REPEATED_FORK_OK\\n'; printf '中文输出\\n'",@"expect":@"REPEATED_FORK_OK",@"also":@"中文输出"},
   @{@"session":@"proof-one",@"command":@"yes bounded | head -c 140000; echo OUTPUT_END",@"expect":@"OUTPUT_END",@"truncated":@YES}
  ];
@@ -206,7 +214,7 @@ BOOL TFAIHasLiveRuns(void){return NO;}
 }
 - (void)rejectFileCase:(NSUInteger)i path:(NSString *)path{
  NSArray *paths=@[@"/../../etc/passwd",@"/tmp/sh",@"/dev/null",@"/workspace"];
- if(i==paths.count){[TFAIISHRuntime.shared fileOperation:@"read" path:path arguments:@{} session:@"proof-two" completion:^(NSDictionary *r,NSError *e){[self record:@"vfs_cross_session_read_rejected" passed:e&&!r detail:nil];[self advancedFiles];}];return;}
+ if(i==paths.count){[TFAIISHRuntime.shared fileOperation:@"read" path:path arguments:@{} session:@"proof-two" completion:^(NSDictionary *r,NSError *e){[self record:@"vfs_cross_session_read_shared" passed:!e&&[r[@"content"] isEqual:@"changed"] detail:nil];[self advancedFiles];}];return;}
  [TFAIISHRuntime.shared fileOperation:@"read" path:paths[i] arguments:@{} session:@"proof-two" completion:^(NSDictionary *r,NSError *e){[self record:[@"vfs_reject_" stringByAppendingString:paths[i]] passed:e&&!r detail:nil];[self rejectFileCase:i+1 path:path];}];
 }
 - (void)advancedFiles{

@@ -1,6 +1,7 @@
 #import "TFAITestDetail.h"
 #import "TFAIUIHelpers.h"
 #import "../Providers/TFAIProtocol.h"
+#import "../Providers/TFAIRegistry.h"
 static NSString *TFProbeTitle(NSString *key){return @{@"text":@"文本响应",@"stream":@"流式响应",@"image":@"图片理解",@"tools":@"工具调用",@"thinking":@"深度思考"}[key]?:@"能力测试";}
 static NSString *TFProbeState(NSString *state){return @{@"pass":@"✅ 本次验证通过",@"fail":@"❌ 本次请求失败",@"unknown":@"⚠️ 本次未证实",@"running":@"正在测试",@"pending":@"尚未测试"}[state]?:@"尚未测试";}
 NSDictionary *TFAIRecordProbeResult(NSMutableDictionary *connection,NSString *capability,NSDictionary *result,NSError *error){
@@ -8,8 +9,9 @@ NSDictionary *TFAIRecordProbeResult(NSMutableDictionary *connection,NSString *ca
  NSDictionary *diagnostics=[result[@"diagnostics"] isKindOfClass:NSDictionary.class]?result[@"diagnostics"]:[error.userInfo[@"diagnostics"] isKindOfClass:NSDictionary.class]?error.userInfo[@"diagnostics"]:@{};
  NSString *secret=[TFAIConnections secret:connection[@"id"]?:@""];diagnostics=TFAISanitizeProbeDiagnostics(diagnostics,secret);detail=TFAISanitizeProbeDiagnostics(@{@"reason":detail},secret)[@"reason"]?:@"测试已完成";
  NSMutableDictionary *record=[@{@"state":pass?@"pass":error?@"fail":@"unknown",@"detail":detail,@"diagnostics":diagnostics} mutableCopy];
- NSMutableDictionary *caps=[connection[@"capabilities"] mutableCopy]?:[NSMutableDictionary new];if(pass||![caps[capability] isEqual:@"supported"])caps[capability]=pass?@"supported":@"unknown";connection[@"capabilities"]=caps;
- NSMutableDictionary *results=[connection[@"testResults"] mutableCopy]?:[NSMutableDictionary new];results[capability]=record;connection[@"testResults"]=results;connection[@"testedAt"]=@(NSDate.date.timeIntervalSince1970);
+ BOOL sameScope=!connection[@"capabilitiesScope"]||[connection[@"capabilitiesScope"] isEqual:TFAICapabilityScope(connection)];
+ NSMutableDictionary *caps=sameScope?[connection[@"capabilities"] mutableCopy]:nil;caps=caps?:[NSMutableDictionary new];if(pass||![caps[capability] isEqual:@"supported"])caps[capability]=pass?@"supported":@"unknown";connection[@"capabilities"]=caps;connection[@"capabilitiesScope"]=TFAICapabilityScope(connection);
+ NSMutableDictionary *results=sameScope?[connection[@"testResults"] mutableCopy]:nil;results=results?:[NSMutableDictionary new];results[capability]=record;connection[@"testResults"]=results;connection[@"testedAt"]=@(NSDate.date.timeIntervalSince1970);
  NSError *saveError=nil;if(![TFAIConnections save:connection secret:nil error:&saveError])record[@"saveWarning"]=saveError.localizedDescription?:@"测试记录保存失败";
  [NSNotificationCenter.defaultCenter postNotificationName:@"TFAIProbeResultChanged" object:connection[@"id"] userInfo:@{@"capability":capability,@"record":record}];
  return record;
@@ -20,7 +22,7 @@ NSString *TFAIProbeReport(NSDictionary *record,NSString *capability){
  NSArray *fields=@[@[@"timestamp",@"测试时间"],@[@"duration",@"耗时（秒）"],@[@"protocol",@"协议"],@[@"model",@"模型"],@[@"endpoint",@"请求地址"],@[@"httpStatus",@"HTTP状态"],@[@"requestSummary",@"测试内容"],@[@"expected",@"预期结果"],@[@"reason",@"判定原因"],@[@"responseText",@"模型实际回答"],@[@"responseBody",@"服务原始响应（截断并脱敏）"],@[@"reasoningSummary",@"实际发送的思考参数"]];
  for(NSArray *f in fields)if(d[f[0]])[report appendFormat:@"\n%@\n%@\n",f[1],TFValue(d[f[0]])];
  if(record[@"saveWarning"])[report appendFormat:@"\n保存提示：%@\n",record[@"saveWarning"]];
- [report appendString:@"\n测试仅使用内置样例；未发送项目、会话或用户附件。测试未通过不等于模型永久不支持此能力。\n"];
+ [report appendString:@"\n测试仅使用内置样例；未发送项目、会话或用户附件。测试是可选诊断，不是启用条件；测试失败不会禁用功能。\n"];
  return report;
 }
 @interface TFAITestDetail : UITableViewController

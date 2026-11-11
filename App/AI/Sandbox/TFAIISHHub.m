@@ -53,7 +53,7 @@
  c.accessibilityIdentifier=[NSString stringWithFormat:@"linux.resource.%@",identifier];c.accessibilityValue=state;
  if(active){UIActivityIndicatorView *spinner=[[UIActivityIndicatorView alloc]initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];[spinner startAnimating];c.accessoryView=spinner;}else c.accessoryView=[[UIImageView alloc]initWithImage:[UIImage systemImageNamed:installed?@"checkmark.circle.fill":@"arrow.down.circle"]];return c;
 }
-- (NSString *)tableView:(UITableView *)t titleForFooterInSection:(NSInteger)s{if(!self.tools)return @"目录与 App 数据备份也可直接从软件设置进入。";if(s==0)return @"逐项安装到当前 Linux 环境，使用所选软件源并由 apk 校验签名，首次安装需要联网。选择会持久保存，新会话按选择自动配置。卸载仅移除本页的安装记录，其他工具仍需要的依赖会保留；终端手动或套件安装的包不会直接删除。";return s==1?@"从 dylib.cn 下载并校验后在本页安装，不自动跳转终端。下载缓存全局共用；工具持久保存在 Linux 环境中，新会话会按已选套件自动配置。卸载作用于当前环境并关闭新环境自动安装，其他已有独立环境保留。":@"iOS 26.0 SDK 按需下载并持久保存，首次使用此 SDK 构建时也会自动准备。原生 Clang/LLVM 等签名组件随 App 安装。";}
+- (NSString *)tableView:(UITableView *)t titleForFooterInSection:(NSInteger)s{if(!self.tools)return @"目录与 App 数据备份也可直接从软件设置进入。";if(s==0)return @"逐项安装到全局持久 Linux 环境，所有会话和终端直接共用，使用所选软件源并由 apk 校验签名，首次安装需要联网。卸载仅移除本页的安装记录，其他工具仍需要的依赖会保留；终端手动或套件安装的包不会直接删除。";return s==1?@"从 dylib.cn 下载并校验后在本页安装，不自动跳转终端。工具和下载缓存全局共用，关闭或删除会话不会删除工具；保持同一应用数据容器覆盖安装也会保留。卸载套件会影响全部会话。":@"iOS 26.0 SDK 按需下载并持久保存，首次使用此 SDK 构建时也会自动准备。原生 Clang/LLVM 等签名组件随 App 安装。";}
 - (void)installIdentifier:(NSString *)identifier{
  if([identifier isEqual:@"sdk26"]){
   self.sdkBusy=YES;self.sdkError=nil;[self.tableView reloadData];__weak typeof(self) weak=self;
@@ -71,8 +71,8 @@
  if(!self.tools){UIViewController *page=i.row==0?TFAIDirectoryRegistryController(self.session):i.row==1?TFAIISHMirrorController(self.session):i.row==2?TFAIISHRootCatalogController(self.session):TFAIISHEnvironmentController(self.session,self.root);[self.navigationController pushViewController:page animated:YES];return;}
  if([[DXLinuxToolBatch.shared status:self.session][@"running"] boolValue]){AIAlert(self,@"正在批量安装",@"请等待全部安装完成，或点击右上角停止后续安装。");return;}
  if(i.section==0){NSDictionary *p=DXLinuxPackages()[i.row],*row=self.toolInventory[p[@"id"]];if([@[@"installing",@"uninstalling",@"checking"] containsObject:row[@"state"]]){if([row[@"process_id"] length])[self.navigationController pushViewController:TFAIISHProcessController(self.session,row[@"process_id"]) animated:YES];return;}
- UIAlertController *a=[UIAlertController alertControllerWithTitle:p[@"title"] message:row[@"error"]?:@"工具保存在 Linux 环境中。安装选择将用于新会话；卸载仅移除本页管理的安装，仍被其他工具依赖时会保留。" preferredStyle:UIAlertControllerStyleActionSheet];
- [a addAction:[UIAlertAction actionWithTitle:[row[@"installed"] boolValue]?@"登记安装（用于新会话）":@"安装" style:UIAlertActionStyleDefault handler:^(id action){[self installIdentifier:p[@"id"]];}]];
+ UIAlertController *a=[UIAlertController alertControllerWithTitle:p[@"title"] message:row[@"error"]?:@"工具保存在 Linux 环境中。所有 AI 和终端共用；同一 App 保留数据覆盖安装后继续可用；卸载影响所有会话，仅移除本页管理的安装，仍被其他工具依赖时会保留。" preferredStyle:UIAlertControllerStyleActionSheet];
+ [a addAction:[UIAlertAction actionWithTitle:[row[@"installed"] boolValue]?@"检查安装":@"安装" style:UIAlertActionStyleDefault handler:^(id action){[self installIdentifier:p[@"id"]];}]];
  if([row[@"managed"] boolValue])[a addAction:[UIAlertAction actionWithTitle:@"卸载" style:UIAlertActionStyleDestructive handler:^(id action){[TFAIISHRuntime.shared uninstallTool:p[@"id"] session:self.session completion:^(NSDictionary *r,NSError *e){if(e)AIAlert(self,@"卸载未完成",e.localizedDescription);[self refreshTools];}];}]];
  if([row[@"process_id"] length])[a addAction:[UIAlertAction actionWithTitle:@"查看任务输出" style:UIAlertActionStyleDefault handler:^(id action){[self.navigationController pushViewController:TFAIISHProcessController(self.session,row[@"process_id"]) animated:YES];}]];
  [a addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];a.popoverPresentationController.sourceView=[t cellForRowAtIndexPath:i];a.popoverPresentationController.sourceRect=[t cellForRowAtIndexPath:i].bounds;[self presentViewController:a animated:YES completion:nil];return;}
@@ -84,7 +84,7 @@
   else if([row[@"process_id"] length])[self.navigationController pushViewController:TFAIISHProcessController(self.session,row[@"process_id"]) animated:YES];return;
  }
  if(!installed){[self installIdentifier:identifier];return;}
- UIAlertController *sheet=[UIAlertController alertControllerWithTitle:[DXResourceStore entry:identifier][@"title"] message:i.section==2?@"卸载 SDK 和本机下载缓存；下次需要时可重新下载。":@"卸载当前 Linux 环境中的套件，并关闭新环境自动安装。其他已有独立环境不受影响。" preferredStyle:UIAlertControllerStyleActionSheet];
+ UIAlertController *sheet=[UIAlertController alertControllerWithTitle:[DXResourceStore entry:identifier][@"title"] message:i.section==2?@"卸载 SDK 和本机下载缓存；下次需要时可重新下载。":@"卸载共享环境中的套件，并关闭自动安装；所有终端和 AI 会话都会受到影响。" preferredStyle:UIAlertControllerStyleActionSheet];
  [sheet addAction:[UIAlertAction actionWithTitle:@"卸载" style:UIAlertActionStyleDestructive handler:^(id action){
   if(i.section==2){extern BOOL TMCBuildIsRunning(void) __attribute__((weak_import));if(TMCBuildIsRunning&&TMCBuildIsRunning()){AIAlert(self,@"正在构建",@"请等待构建结束后卸载 SDK。");return;}NSError *error=nil;@synchronized(NSBundle.class){if([DXResourceStore.shared remove:identifier error:&error])[NSFileManager.defaultManager removeItemAtPath:[DXResourceStore.directory stringByAppendingPathComponent:@"SDK26Installed"] error:&error];}if(error)AIAlert(self,@"卸载未完成",error.localizedDescription);[self refreshTools];}
   else[TFAIISHRuntime.shared uninstallTool:identifier session:self.session completion:^(NSDictionary *r,NSError *e){if(e)AIAlert(self,@"卸载未完成",e.localizedDescription);[self refreshTools];}];

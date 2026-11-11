@@ -1,6 +1,7 @@
 #import "DXLinuxToolBatch.h"
 #import "TFAIISHPackageCatalog.h"
 #import "TFAIISHRuntime.h"
+#import "TFAIISHEnvironment.h"
 #import "../../SDKResources.h"
 @interface DXLinuxToolBatch ()
 @property NSMutableDictionary<NSString *,NSMutableDictionary *> *jobs;
@@ -8,17 +9,18 @@
 @implementation DXLinuxToolBatch
 + (instancetype)shared{static id v;static dispatch_once_t once;dispatch_once(&once,^{v=[self new];});return v;}
 - (instancetype)init{if((self=[super init])){_jobs=[NSMutableDictionary new];_runtime=TFAIISHRuntime.shared;}return self;}
-- (NSDictionary *)status:(NSString *)session{return [self.jobs[session] copy]?:@{@"running":@NO};}
+- (NSDictionary *)status:(NSString *)session{return [self.jobs[TFAIISHEnvironment.sharedKey] copy]?:@{@"running":@NO};}
 - (NSArray<NSString *> *)pending:(NSDictionary *)inventory sdkInstalled:(BOOL)sdk{
  NSMutableArray *ids=[NSMutableArray new];for(NSDictionary *p in DXLinuxPackages())if(![inventory[p[@"id"]][@"installed"] boolValue])[ids addObject:p[@"id"]];
  for(NSString *key in @[@"developer-tools",@"reverse-tools"])if(![inventory[key][@"installed"] boolValue])[ids addObject:key];if(!sdk)[ids addObject:@"sdk26"];return ids;
 }
 - (BOOL)start:(NSArray<NSString *> *)identifiers session:(NSString *)session{
+ session=TFAIISHEnvironment.sharedKey;
  NSAssert(NSThread.isMainThread,@"batch state belongs to main thread");if(!session.length||[self.jobs[session][@"running"] boolValue]||!identifiers.count)return NO;
  for(NSString *key in identifiers)if(!DXLinuxPackage(key)&&![@[@"developer-tools",@"reverse-tools",@"sdk26"] containsObject:key])return NO;
  self.jobs[session]=[@{@"running":@YES,@"items":[NSOrderedSet orderedSetWithArray:identifiers].array,@"index":@0,@"failed":@0,@"cancelled":@NO} mutableCopy];[self step:session];return YES;
 }
-- (void)cancelPending:(NSString *)session{self.jobs[session][@"cancelled"]=@YES;}
+- (void)cancelPending:(NSString *)session{self.jobs[TFAIISHEnvironment.sharedKey][@"cancelled"]=@YES;}
 - (void)later:(NSString *)session{dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC),dispatch_get_main_queue(),^{[self step:session];});}
 - (void)advance:(NSString *)session error:(NSError *)error{
  NSMutableDictionary *job=self.jobs[session];if(![job[@"running"] boolValue])return;

@@ -1,3 +1,4 @@
+#import "DocumentPresentation.h"
 #import "AI/Resources/DXAppUpdate.h"
 #import "AI/Backup/DXBackup.h"
 #import "AI/Attachments/TFAIDirectoryRegistry.h"
@@ -313,13 +314,12 @@ static NSArray *ThirdPartyComponents(void){NSString *path=[NSBundle.mainBundle p
 - (void)tableView:(UITableView *)table willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)path{TMCEnableLinksInView(cell);}
 - (void)viewDidLayoutSubviews{[super viewDidLayoutSubviews];TMCEnableLinksInView(self.view);}
 - (void)viewDidLoad{[super viewDidLoad];ApplyTheme(self);self.title=@"关于 Dylix";self.tableView.rowHeight=UITableViewAutomaticDimension;self.tableView.estimatedRowHeight=60;}
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)t{return 6;}
-- (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s{return s==0?2:s==1?3:s==2?2:s==3?3:s==5?3:ThirdPartyComponents().count;}
-- (NSString *)tableView:(UITableView *)t titleForHeaderInSection:(NSInteger)s{return @[@"Dylix",@"功能与使用",@"诊断与适配",@"工具链与本机",@"开源组件与许可证",@"联系与项目"][s];}
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)t{return 5;}
+- (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s{return s==0?2:s==1?3:s==2?2:s==3?3:ThirdPartyComponents().count;}
+- (NSString *)tableView:(UITableView *)t titleForHeaderInSection:(NSInteger)s{return @[@"Dylix",@"功能与使用",@"诊断与适配",@"工具链与本机",@"开源组件与许可证"][s];}
 - (NSString *)tableView:(UITableView *)t titleForFooterInSection:(NSInteger)s{return s==4?@"各组件版权归原作者所有。点击查看来源及完整许可证。SDK 与系统框架适用 Apple 条款；此处未将其标为开源组件。":nil;}
 - (UITableViewCell *)tableView:(UITableView *)t cellForRowAtIndexPath:(NSIndexPath *)i{UITableViewCell *c=[[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];c.textLabel.font=[UIFont systemFontOfSize:15 weight:UIFontWeightMedium];c.detailTextLabel.font=[UIFont systemFontOfSize:12];c.detailTextLabel.numberOfLines=0;
- if(i.section==5){c.textLabel.text=@[@"官方网站",@"项目开源地址",@"软件许可证"][i.row];c.imageView.image=[UIImage systemImageNamed:@[@"globe",@"chevron.left.forwardslash.chevron.right",@"doc.text"][i.row]];}
- else if(i.section==0){c.textLabel.text=@[@"版本",@"作者",@"本机工具链"][i.row];NSDictionary *info=NSBundle.mainBundle.infoDictionary;c.detailTextLabel.text=i.row==0?[NSString stringWithFormat:@"%@（%@）",info[@"CFBundleShortVersionString"],info[@"CFBundleVersion"]]:i.row==1?@"Xuegao":@"Clang / LLD 14 · Perl 5.34.0 · SDK 16.4 / 26.0";c.selectionStyle=i.row==0?UITableViewCellSelectionStyleDefault:UITableViewCellSelectionStyleNone;if(i.row==0){c.detailTextLabel.text=[c.detailTextLabel.text stringByAppendingString:@" · 开源版 · 点击检测更新"];c.accessoryType=UITableViewCellAccessoryDisclosureIndicator;c.accessibilityIdentifier=@"about.checkUpdate";}}
+ if(i.section==0){c.textLabel.text=@[@"版本",@"作者",@"本机工具链"][i.row];NSDictionary *info=NSBundle.mainBundle.infoDictionary;c.detailTextLabel.text=i.row==0?[NSString stringWithFormat:@"%@（%@）",info[@"CFBundleShortVersionString"],info[@"CFBundleVersion"]]:i.row==1?@"Xuegao":@"Clang / LLD 14 · Perl 5.34.0 · SDK 16.4 / 26.0";c.selectionStyle=i.row==0?UITableViewCellSelectionStyleDefault:UITableViewCellSelectionStyleNone;if(i.row==0){c.detailTextLabel.text=[c.detailTextLabel.text stringByAppendingString:@" · 开源版 · 点击检测更新"];c.accessoryType=UITableViewCellAccessoryDisclosureIndicator;c.accessibilityIdentifier=@"about.checkUpdate";}}
  else if(i.section==1){c.textLabel.text=@[@"软件功能说明",@"编译与使用说明",@"隐私与本地存储"][i.row];c.detailTextLabel.text=@[@"工程、编辑器、构建与产物",@"支持范围、签名及运行环境",@"离线规则、项目与诊断记录"][i.row];}
  else if(i.section==2){c.textLabel.text=i.row==0?@"编译诊断与兼容适配规则库":@"适配前后诊断记录";c.detailTextLabel.text=i.row==0?@"规则条件、验证状态及来源":@"按项目查看修复前后记录";}
  else if(i.section==3){c.textLabel.text=@[@"Clang / LLD",@"SDK / Perl",@"设备 / 系统"][i.row];struct utsname n;uname(&n);c.detailTextLabel.text=i.row==0?@"14 / 14":i.row==1?@"16.4、26.0 / 5.34.0":[NSString stringWithFormat:@"%s / %@",n.machine,UIDevice.currentDevice.systemVersion];c.selectionStyle=UITableViewCellSelectionStyleNone;}
@@ -328,7 +328,7 @@ static NSArray *ThirdPartyComponents(void){NSString *path=[NSBundle.mainBundle p
 - (void)showText:(NSString *)text title:(NSString *)title{[self.navigationController pushViewController:TMCHelpTextArticle(title,text) animated:YES];}
 - (void)historyForProject:(NSString *)root{NSString *folder=[root stringByAppendingPathComponent:@".studio-repair-history"];NSArray *names=[[NSFileManager.defaultManager contentsOfDirectoryAtPath:folder error:nil] sortedArrayUsingSelector:@selector(compare:)];NSMutableString *text=[NSMutableString new];for(NSString *name in names)if([name.pathExtension isEqual:@"json"]){NSString *record=[NSString stringWithContentsOfFile:[folder stringByAppendingPathComponent:name] encoding:NSUTF8StringEncoding error:nil];[text appendFormat:@"%@\n%@\n\n",name,record?:@""];}[self showText:text.length?text:@"本项目暂无适配记录。" title:[NSString stringWithFormat:@"%@ · 适配记录",ProjectName(root)]];}
 - (void)chooseHistory{NSMutableArray *projects=[NSMutableArray new];for(NSString *name in [NSFileManager.defaultManager contentsOfDirectoryAtPath:Projects() error:nil]){NSString *root=[Projects() stringByAppendingPathComponent:name];if([[NSFileManager.defaultManager contentsOfDirectoryAtPath:[root stringByAppendingPathComponent:@".studio-repair-history"] error:nil] count])[projects addObject:root];}if(!projects.count){Message(self,@"暂无适配记录",@"项目应用修复后会保存原诊断；重新构建完成后追加新诊断。");return;}UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"选择项目" message:nil preferredStyle:UIAlertControllerStyleActionSheet];for(NSString *root in projects)[alert addAction:[UIAlertAction actionWithTitle:ProjectName(root) style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){[self historyForProject:root];}]];[alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];alert.popoverPresentationController.sourceView=self.view;alert.popoverPresentationController.sourceRect=CGRectMake(self.view.bounds.size.width/2,self.view.bounds.size.height/2,1,1);[self presentViewController:alert animated:YES completion:nil];}
-- (void)tableView:(UITableView *)t didSelectRowAtIndexPath:(NSIndexPath *)i{[t deselectRowAtIndexPath:i animated:YES];if(i.section==5){if(i.row==2){NSString *file=[NSBundle.mainBundle pathForResource:@"Dylix-LICENSE" ofType:@"txt"];[self showText:[NSString stringWithContentsOfFile:file encoding:NSUTF8StringEncoding error:nil]?:@"GPL-3.0-or-later" title:@"软件许可证"];return;}NSString *url=@[@"https://dylib.cn",@"https://github.com/yangokok886/dylix"][i.row];[UIApplication.sharedApplication openURL:[NSURL URLWithString:url] options:@{} completionHandler:nil];return;}
+- (void)tableView:(UITableView *)t didSelectRowAtIndexPath:(NSIndexPath *)i{[t deselectRowAtIndexPath:i animated:YES];
  if(i.section==3)return;if(!i.section){if(i.row==0)DXAppUpdatePresent(self,YES);return;}
  if(i.section==1){NSArray *texts=@[@"Dylix 是在 iPhone 本机工作的插件开发工具。\n\n• 创建、打开与压缩包导入项目，管理最近与本机项目。\n• 文件编辑、语法着色、行号、查找替换、错误位置跳转。\n• Makefile 常用静态配置识别、Objective-C / C / C++ / Objective-C++、多 Logos 源文件构建。\n• 导出 dylib 与 DEB，按项目覆盖全局构建设置，自定义产物名称。\n• 实时构建日志、结果导出、离线诊断与兼容修复。\n• Git 本地暂存、提交、差异、历史、分支合并、版本恢复与撤回。\n• HTTPS 克隆、获取、拉取、推送；冲突逐文件处理；认证令牌存钥匙串。",@"工具链在应用内执行本地编译。支持有根、无根和隐根包布局；包布局与 CPU 架构是两个不同设置。\n\n当前以 arm64 为主要编译目标。复杂 Makefile、真实外部依赖及新语言特性需逐项核对；不包含 Xcode / MonkeyDev 导入器。\n\n产物的签名、安装和宿主加载需要相应工具与运行环境。",@"规则匹配与兼容修复离线运行，不连接 AI 或云端。AI 助手连接你配置的模型服务；明确选择的上下文和工具读取结果会发送给该服务，源码修改须经本机审批。\n\n项目、日志、备份及适配历史保存在本机应用目录。分享仅在你主动操作时导出。\n\nGit 本地操作离线执行；克隆、获取、拉取、推送按你指定的远程仓库联网。用户名和访问令牌保存在设备钥匙串，不写入源码或仓库地址。Git 远程传输当前支持 HTTPS，不包含 SSH、Git LFS 下载和子模块递归克隆。删除项目时，其项目内备份及适配历史也随之删除。"];
  [self showText:texts[i.row] title:@[@"软件功能说明",@"编译与使用说明",@"隐私与本地存储"][i.row]];
@@ -400,12 +400,12 @@ static NSString *OptimizationName(NSString *value){return @{@"release-speed":@"�
 @property BOOL feedbackSubmitting;
 @end
 static NSArray *StudioSettingSections(void){return @[
- @{@"title":@"AI 对话",@"rows":@[@[@"ai",@"模型与连接",@"sparkles",@"服务商、模型与能力测试"],@[@"persona",@"人设与提示词",@"person.crop.square",@"管理本地人设与提示词"],@[@"answer",@"执行与回答",@"slider.horizontal.3",@"回答风格、工具加载与缓存"],@[@"usage",@"用量统计",@"chart.bar",@"按时间、会话与模型查看"]]},
+ @{@"title":@"AI 对话",@"rows":@[@[@"ai",@"模型与连接",@"sparkles",@"服务商、模型与能力测试"],@[@"persona",@"人设与提示词",@"person.crop.square",@"本地人设与提示词合集"],@[@"answer",@"执行与回答",@"slider.horizontal.3",@"回答风格、工具加载与缓存"],@[@"usage",@"用量统计",@"chart.bar",@"按时间、会话与模型查看"]]},
  @{@"title":@"插件开发",@"rows":@[@[@"build",@"默认构建设置",@"hammer",@"SDK、最低系统与产物"],@[@"optimization",@"优化方案",@"speedometer",@""],@[@"git",@"Git 与源代码管理",@"point.3.connected.trianglepath.dotted",@"身份、服务账号与自动存档"],@[@"remote",@"局域网远程",@"network",@"浏览器工作台与本机连接"]]},
  @{@"title":@"终端与逆向",@"rows":@[@[@"terminal",@"终端",@"terminal",@"打开独立 Linux 沙盒"],@[@"tools",@"安装工具",@"shippingbox",@"按需安装、查看状态与卸载"],@[@"headers",@"IPA 头文件导出",@"doc.text.magnifyingglass",@"本机分析与 ZIP 分享"],@[@"crash",@"离线崩溃分析",@"waveform.path.ecg",@"导入 .ips 与符号档案"]]},
  @{@"title":@"数据与工具",@"rows":@[@[@"mounts",@"挂载文件夹",@"externaldrive",@"管理外部文件夹授权"],@[@"backup",@"备份与恢复",@"archivebox",@"项目、会话、附件与软件配置"],@[@"storage",@"存储空间",@"internaldrive",@"查看占用与清理缓存"]]},
  @{@"title":@"外观与编辑器",@"rows":@[@[@"theme",@"界面外观",@"circle.lefthalf.filled",@""],@[@"font",@"代码字号",@"textformat.size",@""],@[@"tabs",@"始终显示底部导航栏",@"rectangle.bottomthird.inset.filled",@""]]},
- @{@"title":@"关于与支持",@"rows":@[@[@"about",@"关于 Dylix",@"info.circle",@"版本更新、项目地址与工具链"]]}
+ @{@"title":@"关于与支持",@"rows":@[@[@"about",@"关于 Dylix",@"info.circle",@"版本更新、使用说明与工具链"],@[@"feedback",@"反馈与建议",@"bubble.left.and.bubble.right",@""],@[@"telegram",@"Telegram 频道",@"paperplane",@""],@[@"website",@"官方网站",@"globe",@""],@[@"source",@"项目开源地址",@"chevron.left.forwardslash.chevron.right",@""],@[@"license",@"软件许可证",@"doc.text",@""]]}
  ];}
 @implementation StudioSettings
 - (NSArray *)rowAt:(NSIndexPath *)i{return StudioSettingSections()[i.section][@"rows"][i.row];}
@@ -427,6 +427,11 @@ static NSArray *StudioSettingSections(void){return @[
 }
 - (void)tableView:(UITableView *)t didSelectRowAtIndexPath:(NSIndexPath *)i{
  [t deselectRowAtIndexPath:i animated:YES];NSString *key=[self rowAt:i][0];UIViewController *page=nil;
+ if([key isEqual:@"feedback"]){[UIApplication.sharedApplication openURL:[NSURL URLWithString:@"https://github.com/yangokok886/dylix/issues"] options:@{} completionHandler:nil];return;}
+ NSDictionary *links=@{@"telegram":@"https://t.me/xxuegao6",@"website":@"https://dylib.cn",@"source":@"https://github.com/yangokok886/dylix"};
+ if(links[key]){[UIApplication.sharedApplication openURL:[NSURL URLWithString:links[key]] options:@{} completionHandler:^(BOOL ok){if(!ok)dispatch_async(dispatch_get_main_queue(),^{Message(self,@"打开失败",@"请检查浏览器设置后重试。");});}];return;}
+ if([key isEqual:@"license"]){NSString *file=[NSBundle.mainBundle pathForResource:@"Dylix-LICENSE" ofType:@"txt"];page=TMCHelpTextArticle(@"软件许可证",[NSString stringWithContentsOfFile:file encoding:NSUTF8StringEncoding error:nil]?:@"GPL-3.0-or-later；请查看项目开源地址。");[self.navigationController pushViewController:page animated:YES];return;}
+
  if([key isEqual:@"ai"])page=TFAISettingsController(nil);
  else if([key isEqual:@"persona"])page=TFAIPersonaController();
  else if([key isEqual:@"answer"])page=TFAIOptimizationSettingsController();
@@ -783,10 +788,10 @@ dispatch_async(dispatch_get_main_queue(),^{self.modificationDates=dates;self.fil
 static void OpenLinuxProjectTerminal(UIViewController *host,NSString *root){
  NSString *scope=TFAIProjectID(root);if(!scope)return;
  NSArray *sessions=[TFAISessions sessions:scope];
- if(!sessions.count){NSMutableDictionary *fresh=[TFAISessions create:scope title:@"项目开发"];fresh[@"projectName"]=ProjectName(root);fresh[@"projectRoot"]=root;fresh[@"storageProjectID"]=scope;NSError *error=nil;if(![TFAISessions save:fresh project:scope error:&error]){Message(host,@"会话未创建",error.localizedDescription);return;}[host.navigationController pushViewController:TFAIISHTerminalControllerWithRoot(fresh[@"id"],root) animated:YES];return;}
- if(sessions.count==1){[host.navigationController pushViewController:TFAIISHTerminalControllerWithRoot(sessions.firstObject[@"id"],root) animated:YES];return;}
+ if(!sessions.count){NSMutableDictionary *fresh=[TFAISessions create:scope title:@"项目开发"];fresh[@"projectName"]=ProjectName(root);fresh[@"projectRoot"]=root;fresh[@"storageProjectID"]=scope;NSError *error=nil;if(![TFAISessions save:fresh project:scope error:&error]){Message(host,@"会话未创建",error.localizedDescription);return;}[TFAIISHRuntime.shared configureSessionTitle:fresh[@"title"] session:fresh[@"id"]];[host.navigationController pushViewController:TFAIISHTerminalControllerWithRoot(fresh[@"id"],root) animated:YES];return;}
+ if(sessions.count==1){[TFAIISHRuntime.shared configureSessionTitle:sessions.firstObject[@"title"] session:sessions.firstObject[@"id"]];[host.navigationController pushViewController:TFAIISHTerminalControllerWithRoot(sessions.firstObject[@"id"],root) animated:YES];return;}
  UIAlertController *sheet=[UIAlertController alertControllerWithTitle:@"选择项目终端会话" message:@"与该 AI 会话共用 Linux 文件和进程。项目原文件仍通过副本导入和审核写回。" preferredStyle:UIAlertControllerStyleActionSheet];
- for(NSDictionary *record in sessions){[sheet addAction:[UIAlertAction actionWithTitle:record[@"title"]?:@"未命名会话" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a){[host.navigationController pushViewController:TFAIISHTerminalControllerWithRoot(record[@"id"],root) animated:YES];}]];}
+ for(NSDictionary *record in sessions){[sheet addAction:[UIAlertAction actionWithTitle:record[@"title"]?:@"未命名会话" style:UIAlertActionStyleDefault handler:^(UIAlertAction *a){[TFAIISHRuntime.shared configureSessionTitle:record[@"title"] session:record[@"id"]];[host.navigationController pushViewController:TFAIISHTerminalControllerWithRoot(record[@"id"],root) animated:YES];}]];}
  [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];sheet.popoverPresentationController.sourceView=host.view;sheet.popoverPresentationController.sourceRect=CGRectMake(host.view.bounds.size.width-50,host.view.safeAreaInsets.top,1,1);[host presentViewController:sheet animated:YES completion:nil];
 
 }
@@ -1227,7 +1232,7 @@ static void OpenLinuxProjectTerminal(UIViewController *host,NSString *root){
   dispatch_async(dispatch_get_main_queue(),^{
    self.editor.editable=YES;self.snapshotProgress=nil;
    if(!copied||progress.cancelled||self.engine.cancelRequested){if(copied)[NSFileManager.defaultManager removeItemAtPath:snap error:nil];self.busy=NO;[[TMCGitAutomation shared] buildFinished:self.root success:NO];self.navigationItem.rightBarButtonItems.firstObject.enabled=YES;self.logTitle.text=progress.cancelled?@"已取消准备构建":@"创建构建快照失败";self.logDetail.text=error.localizedDescription;self.logIcon.image=[UIImage systemImageNamed:@"xmark.circle.fill"];self.logIcon.tintColor=UIColor.systemRedColor;return;}
-   self.snapshot=snap;self.engine.importedProject=snap;__weak typeof(self) weakSelf=self;self.engine.buildCompletion=^(BOOL success){StudioEditor *v=weakSelf;if(!v)return;JSONWrite(@{@"project":v.root,@"projectKey":[v cacheOwner],@"snapshot":snap,@"sessionID":sessionID?:@""},[v.engine.lastBuild stringByAppendingPathComponent:@".studio-cache-owner.json"],nil);[v refreshBuild];NSString *keep=v.engine.lastBuild,*root=v.root;dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{TMCPruneBuildCaches(Docs(),root,keep);});};[self.engine runProof];JSONWrite(@{@"project":self.root,@"projectKey":[self cacheOwner],@"snapshot":snap,@"sessionID":sessionID?:@""},[self.engine.lastBuild stringByAppendingPathComponent:@".studio-cache-owner.json"],nil);[self rememberBuildCache];if(self.busy)self.timer=[NSTimer scheduledTimerWithTimeInterval:.35 repeats:YES block:^(NSTimer *timer){[weakSelf refreshBuild];}];
+   TMCDocumentHide(snap);self.snapshot=snap;self.engine.importedProject=snap;__weak typeof(self) weakSelf=self;self.engine.buildCompletion=^(BOOL success){StudioEditor *v=weakSelf;if(!v)return;JSONWrite(@{@"project":v.root,@"projectKey":[v cacheOwner],@"snapshot":snap,@"sessionID":sessionID?:@""},[v.engine.lastBuild stringByAppendingPathComponent:@".studio-cache-owner.json"],nil);NSString *exportBuild=v.engine.lastBuild;dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{TMCDocumentPublishBuild(Docs(),exportBuild,nil);});[v refreshBuild];NSString *keep=v.engine.lastBuild,*root=v.root;dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{TMCPruneBuildCaches(Docs(),root,keep);});};[self.engine runProof];JSONWrite(@{@"project":self.root,@"projectKey":[self cacheOwner],@"snapshot":snap,@"sessionID":sessionID?:@""},[self.engine.lastBuild stringByAppendingPathComponent:@".studio-cache-owner.json"],nil);[self rememberBuildCache];if(self.busy)self.timer=[NSTimer scheduledTimerWithTimeInterval:.35 repeats:YES block:^(NSTimer *timer){[weakSelf refreshBuild];}];
   });
  });
 }
@@ -1678,3 +1683,7 @@ UIViewController *TMCStudioSDKRegression(void){
 }
 
 BOOL TMCStudioResumeBuild(NSString *root,UINavigationController *navigation){if(![root isKindOfClass:NSString.class]||!navigation)return NO;BOOL valid=NO;for(NSDictionary *project in TFAIInternalProjects())if([project[@"root"] isEqual:root])valid=YES;if(!valid)return NO;StudioEditor *editor=[StudioEditor new];editor.root=root;[editor loadViewIfNeeded];[navigation pushViewController:editor animated:YES];[editor build];return YES;}
+
+#if TARGET_OS_SIMULATOR
+#include "../tests/StorageBackup258UI.inc"
+#endif

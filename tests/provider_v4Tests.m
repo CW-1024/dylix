@@ -31,7 +31,8 @@ static NSMutableArray *Requests;
 static NSDictionary *Probe(NSDictionary *connection,NSString *capability,NSError **outError){__block BOOL done=NO;__block NSDictionary *result=nil;__block NSError *error=nil;TFAITransport *transport=[TFAITransport new];[transport probe:connection capability:capability completion:^(NSDictionary *value,NSError *failure){result=value;error=failure;done=YES;}];NSDate *limit=[NSDate dateWithTimeIntervalSinceNow:5];while(!done&&limit.timeIntervalSinceNow>0)[NSRunLoop.currentRunLoop runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:.02]];if(outError)*outError=error;Check(done,@"probe finishes without an external network request");return result;}
 #include "Provider225Tests.inc"
 #include "Provider231Tests.inc"
-int main(int argc,char **argv){@autoreleasepool{Requests=[NSMutableArray new];Provider225Tests();Provider231Tests();NSError *error=nil;
+#include "Provider256Tests.inc"
+int main(int argc,char **argv){@autoreleasepool{Requests=[NSMutableArray new];Provider225Tests();Provider231Tests();Provider256Tests();NSError *error=nil;
  Check(TFAIProtocolCatalog().count==11,@"original eight service choices plus Kimi, xAI and custom");
  NSDictionary *sf=@{@"protocol":@"siliconflow",@"baseURL":@"https://api.siliconflow.cn/v1",@"model":@"deepseek-ai/DeepSeek-V3"};
  Check([TFAIEndpoint(sf,YES,&error).absoluteString isEqual:@"https://api.siliconflow.cn/v1/models"],@"SiliconFlow model endpoint");
@@ -42,15 +43,15 @@ int main(int argc,char **argv){@autoreleasepool{Requests=[NSMutableArray new];Pr
  Check([TFAIModelPage(@{@"data":@[@{@"id":@"deepseek-ai/DeepSeek-V3"},@{@"id":@"Qwen/Qwen3-8B"}]})[@"data"] count]==2,@"SiliconFlow multi-brand model list preserved");
  Check([TFAIEndpoint(@{@"protocol":@"deepseek",@"baseURL":@"https://api.deepseek.com"},NO,&error).absoluteString isEqual:@"https://api.deepseek.com/chat/completions"],@"DeepSeek root URL preserved without invented /v1");
  Check([TFAIEndpoint(Conn(@"gemini"),NO,&error).path hasSuffix:@"/models/gemini-3-pro-preview:generateContent"],@"native Gemini generate endpoint");
- Check(TFAIReasoningOptions(Conn(@"chat")).count==1&&TFAIReasoningOptions(Conn(@"gemini")).count==3,@"unknown model defaults and documented Gemini levels");
+ Check(TFAIReasoningOptions(Conn(@"chat")).count==4&&TFAIReasoningOptions(Conn(@"gemini")).count==3,@"unknown model offers optional compatible controls without a probe; Gemini keeps documented levels");
  NSMutableDictionary *gateway=[Conn(@"chat") mutableCopy];gateway[@"baseURL"]=@"https://kedaya.ai/v1";gateway[@"model"]=@"gpt-6-sol";
- Check(TFAIReasoningOptions(gateway).count==6,@"gateway hostname does not suppress GPT reasoning options");
+ Check([[TFAIReasoningOptions(gateway) valueForKey:@"id"] containsObject:@"max"],@"gateway uses catalog effort declarations without requiring tests");
  gateway[@"reasoningEffort"]=@"high";NSDictionary *effortBody=TFAIRequestBody(@[@{@"role":@"user",@"content":@"test"}],gateway,@[],YES,&error);
  Check([effortBody[@"reasoning_effort"] isEqual:@"high"]&&!effortBody[@"reasoning"],@"Chat gateway uses reasoning_effort");
- for(NSString *level in @[@"low",@"medium",@"high",@"xhigh",@"ultra"]){gateway[@"reasoningEffort"]=level;NSDictionary *wire=TFAIRequestBody(@[],gateway,@[],YES,&error);Check([wire[@"reasoning_effort"] isEqual:level],[@"GPT Sol Chat exact effort: " stringByAppendingString:level]);}
+ for(NSString *level in @[@"low",@"medium",@"high",@"xhigh",@"max"]){gateway[@"reasoningEffort"]=level;NSDictionary *wire=TFAIRequestBody(@[],gateway,@[],YES,&error);Check([wire[@"reasoning_effort"] isEqual:level],[@"GPT Sol Chat exact effort: " stringByAppendingString:level]);}
  gateway[@"model"]=@"gpt-6.1-sol";Check([[[TFAIReasoningOptions(gateway) valueForKey:@"id"] componentsJoinedByString:@","] isEqual:@"auto,low,medium,high,xhigh,ultra"],@"GPT 6.1 Sol five explicit levels plus default");
- gateway[@"model"]=@"gpt-5.1";Check(TFAIReasoningOptions(gateway).count==4,@"older GPT model retains three explicit levels");
- gateway[@"model"]=@"gpt-5.2";Check(TFAIReasoningOptions(gateway).count==5&&![[TFAIReasoningOptions(gateway) valueForKey:@"id"] containsObject:@"ultra"],@"GPT 5.2 includes xhigh without invented Ultra");
+ gateway[@"model"]=@"gpt-5.1";Check([[TFAIReasoningOptions(gateway) valueForKey:@"id"] containsObject:@"high"],@"older GPT uses declared effort levels");
+ gateway[@"model"]=@"gpt-5.2";Check([[TFAIReasoningOptions(gateway) valueForKey:@"id"] containsObject:@"xhigh"]&&![[TFAIReasoningOptions(gateway) valueForKey:@"id"] containsObject:@"ultra"],@"GPT 5.2 includes xhigh without invented Ultra");
  gateway[@"reasoningEffort"]=@"ultra";NSError *unsupported=nil;Check(!TFAIRequestBody(@[],gateway,@[],YES,&unsupported)&&unsupported!=nil,@"unsupported effort rejected before sending");
  gateway[@"model"]=@"vendor/gpt-6.1-sol";gateway[@"protocol"]=@"responses";gateway[@"reasoningEffort"]=@"ultra";NSDictionary *ultraBody=TFAIRequestBody(@[],gateway,@[],YES,&error);Check([ultraBody[@"reasoning"][@"effort"] isEqual:@"ultra"],@"vendor-prefixed Sol Responses preserves Ultra wire value");
  gateway[@"model"]=@"gpt-6-sol";gateway[@"reasoningEffort"]=@"high";
@@ -96,8 +97,8 @@ int main(int argc,char **argv){@autoreleasepool{Requests=[NSMutableArray new];Pr
  }
  NSMutableDictionary *manual=[Conn(@"chat") mutableCopy];manual[@"model"]=@"custom-reasoner";NSString *scope=TFAIThinkingScope(manual);manual[@"thinkingOverrides"]=@{scope:@{@"wire":@"thinking",@"levels":@[@"enabled"]}};
  Check(TFAIReasoningOptions(manual).count==2,@"manual capability enables exact endpoint model scope");manual[@"reasoningEffort"]=@"enabled";NSError *manualError=nil;NSDictionary *manualBody=TFAIRequestBody(@[@{@"role":@"user",@"content":@"hello"}],manual,@[],NO,&manualError);Check([manualBody[@"thinking"][@"type"] isEqual:@"enabled"]&&!manualError,@"manual thinking wire sends declared parameter");Check([TFAIReasoningRequestSummary(manualBody,manual) containsString:@"thinking"],@"diagnostics describe actual thinking parameter");
- NSMutableDictionary *otherEndpoint=[manual mutableCopy];otherEndpoint[@"baseURL"]=@"https://other.example.invalid/v1";Check(TFAIReasoningOptions(otherEndpoint).count==1,@"same model on another endpoint does not inherit manual capabilities");Check([TFAIValidatedReasoningEffort(otherEndpoint,@"enabled") isEqual:@"auto"],@"stale effort resets when scope changes");
- NSMutableDictionary *otherProtocol=[manual mutableCopy];otherProtocol[@"protocol"]=@"responses";Check(TFAIReasoningOptions(otherProtocol).count==1,@"same endpoint and model on another protocol isolated");
+ NSMutableDictionary *otherEndpoint=[manual mutableCopy];otherEndpoint[@"baseURL"]=@"https://other.example.invalid/v1";Check(![TFAIThinkingConfiguration(otherEndpoint)[@"source"] containsString:@"手动配置"]&&[TFAIThinkingConfiguration(otherEndpoint)[@"wire"] isEqual:@"reasoning_effort"],@"same model on another endpoint does not inherit manual capabilities");Check([TFAIValidatedReasoningEffort(otherEndpoint,@"enabled") isEqual:@"auto"],@"stale effort resets when scope changes");
+ NSMutableDictionary *otherProtocol=[manual mutableCopy];otherProtocol[@"protocol"]=@"responses";Check(![TFAIThinkingConfiguration(otherProtocol)[@"source"] containsString:@"手动配置"]&&[TFAIThinkingConfiguration(otherProtocol)[@"wire"] isEqual:@"reasoning"],@"same endpoint and model on another protocol isolated");
  NSMutableDictionary *disabled=[manual mutableCopy];disabled[@"thinkingOverrides"]=@{scope:@{@"wire":@"disabled",@"levels":@[@"high"]}};Check(TFAIReasoningOptions(disabled).count==1,@"disabled override ignores stale level entries");
  NSMutableDictionary *canonical=[manual mutableCopy];canonical[@"baseURL"]=@"https://provider-v4.example.invalid/v1/chat/completions/";Check([TFAIThinkingScope(canonical) isEqual:scope],@"equivalent base and full endpoint share scope");
  printf("RESULT %d checks %d failures\n",count,failed);return failed?1:0;}}

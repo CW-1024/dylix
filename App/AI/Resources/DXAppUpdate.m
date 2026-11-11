@@ -25,6 +25,16 @@ NSDictionary *DXAppUpdateFromHTML(NSString *html,NSURL *page,NSError **error){
 @end
 @implementation DXAppUpdate
 + (instancetype)shared{static id value;static dispatch_once_t once;dispatch_once(&once,^{value=[self new];});return value;}
+- (void)ignoreVersion:(NSString *)version{
+ if(ValidVersion(version))[NSUserDefaults.standardUserDefaults setObject:version forKey:@"DylixIgnoredUpdateVersion"];
+}
+- (BOOL)shouldOfferRelease:(NSDictionary *)release installedVersion:(NSString *)installed manual:(BOOL)manual{
+ NSString *version=release[@"version"];
+ if(!DXAppVersionIsNewer(version,installed))return NO;
+ NSString *ignored=[NSUserDefaults.standardUserDefaults stringForKey:@"DylixIgnoredUpdateVersion"];
+ BOOL same=ValidVersion(ignored)&&!DXAppVersionIsNewer(version,ignored)&&!DXAppVersionIsNewer(ignored,version);
+ return manual||!same;
+}
 - (void)check:(void(^)(NSDictionary *,NSError *))completion{
  dispatch_async(dispatch_get_main_queue(),^{if(self.checking){[self.callbacks addObject:[completion copy]];return;}self.checking=YES;self.callbacks=[NSMutableArray arrayWithObject:[completion copy]];self.data=[NSMutableData new];self.failure=nil;
  NSURLSessionConfiguration *config=NSURLSessionConfiguration.ephemeralSessionConfiguration;config.timeoutIntervalForRequest=20;config.timeoutIntervalForResource=30;config.URLCache=nil;config.HTTPCookieStorage=nil;self.session=[NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:NSOperationQueue.mainQueue];NSMutableURLRequest *request=[NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"https://dylib.cn/"] cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:20];[[self.session dataTaskWithRequest:request] resume];});

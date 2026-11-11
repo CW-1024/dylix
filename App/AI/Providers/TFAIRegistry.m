@@ -22,20 +22,50 @@ NSString *TFAIModelMetadataScope(NSDictionary *c){
 NSString *TFAICapabilityScope(NSDictionary *c){return [TFAIModelMetadataScope(c) stringByAppendingFormat:@"|%@",c[@"model"]?:@""];}
 static NSDictionary *TFDict(id value){return [value isKindOfClass:NSDictionary.class]?value:@{};}
 static NSArray *TFStrings(id value){if(![value isKindOfClass:NSArray.class])return @[];NSMutableArray *out=[NSMutableArray new];for(id item in value)if(out.count<32&&[item isKindOfClass:NSString.class]&&[item length]<=128&&![out containsObject:item])[out addObject:[item lowercaseString]];return out;}
+static NSString *TFDeclaredState(id value){
+ if([value isKindOfClass:NSNumber.class]&&([value isEqual:@0]||[value isEqual:@1]))return [value boolValue]?@"supported":@"unsupported";
+ if([value isKindOfClass:NSString.class]&&[@[@"supported",@"unsupported"] containsObject:value])return value;
+ return nil;
+}
 NSDictionary *TFAISanitizeModelMetadata(id row){
- if(![row isKindOfClass:NSDictionary.class])return @{};NSDictionary *raw=row,*caps=TFDict(raw[@"capabilities"]);NSMutableDictionary *combined=[TFDict(caps[@"supports"]) mutableCopy];[combined addEntriesFromDictionary:caps];caps=combined;NSMutableDictionary *declared=[NSMutableDictionary new];
- NSDictionary *aliases=@{@"text":@[@"text"],@"stream":@[@"stream",@"streaming"],@"image":@[@"image",@"vision"],@"tools":@[@"tools",@"tool_calls",@"tool_calling",@"function_calling"],@"thinking":@[@"thinking",@"reasoning",@"supports_reasoning"]};
- for(NSString *key in aliases)for(NSString *alias in aliases[key]){id value=caps[alias]?:raw[alias];if([value isKindOfClass:NSNumber.class]&&CFGetTypeID((__bridge CFTypeRef)value)==CFBooleanGetTypeID()){declared[key]=[value boolValue]?@"supported":@"unsupported";break;}if([@[@"supported",@"unsupported"] containsObject:value?:@""]){declared[key]=value;break;}}
- NSArray *inputs=TFStrings(raw[@"input_modalities"]?:TFDict(raw[@"architecture"])[@"input_modalities"]?:TFDict(raw[@"modalities"])[@"input"]);
- if(inputs.count){for(NSString *key in @[@"text",@"image"])if([inputs containsObject:key])declared[key]=@"supported";}
- NSArray *parameters=TFStrings(raw[@"supported_parameters"]);if([parameters containsObject:@"tools"]||[parameters containsObject:@"tool_choice"])declared[@"tools"]=@"supported";
- id effortRaw=raw[@"efforts"]?:raw[@"supported_reasoning_efforts"]?:raw[@"supported_reasoning_levels"]?:raw[@"reasoning_effort_values"]?:caps[@"reasoning_effort"]?:TFDict(raw[@"reasoning"])[@"levels"];NSMutableArray *effortNames=[NSMutableArray new];if([effortRaw isKindOfClass:NSArray.class])for(id value in effortRaw){id name=[value isKindOfClass:NSDictionary.class]?value[@"effort"]:value;if([name isKindOfClass:NSString.class]&&effortNames.count<32)[effortNames addObject:name];}NSArray *efforts=TFStrings(effortNames);NSMutableArray *valid=[NSMutableArray new];
- for(NSString *level in efforts)if([@[@"none",@"minimal",@"low",@"medium",@"high",@"xhigh",@"ultra",@"max",@"enabled"] containsObject:level])[valid addObject:level];
+ if(![row isKindOfClass:NSDictionary.class])return @{};
+ NSDictionary *raw=row,*caps=TFDict(raw[@"capabilities"]);
+ NSMutableDictionary *combined=[TFDict(caps[@"supports"]) mutableCopy];[combined addEntriesFromDictionary:caps];caps=combined;
+ NSMutableDictionary *declared=[NSMutableDictionary new];
+ NSDictionary *aliases=@{
+  @"text":@[@"text",@"supports_text"],@"stream":@[@"stream",@"streaming",@"supports_streaming"],
+  @"image":@[@"image",@"vision",@"supports_vision",@"supports_images",@"supports_image_input"],
+  @"tools":@[@"tools",@"tool_call",@"tool_calls",@"tool_calling",@"function_calling",@"supports_tools",@"supports_function_calling"],
+  @"thinking":@[@"thinking",@"reasoning",@"supports_reasoning",@"supports_thinking"]};
+ for(NSString *key in aliases)for(NSString *alias in aliases[key]){
+  NSString *state=TFDeclaredState(caps[alias]?:raw[alias]);if(state){declared[key]=state;break;}
+ }
+ NSArray *inputs=TFStrings(raw[@"input_modalities"]?:TFDict(raw[@"architecture"])[@"input_modalities"]?:TFDict(raw[@"modalities"])[@"input"]?:raw[@"supported_modalities"]);
+ NSMutableArray *normalized=[NSMutableArray new];for(NSString *input in inputs){NSString *name=[input hasSuffix:@"_input"]?[input substringToIndex:input.length-6]:input;[normalized addObject:name];}
+ // An explicitly supplied input list is a declaration, not a successful probe.
+ if(normalized.count)for(NSString *key in @[@"text",@"image"])if(!declared[key])declared[key]=[normalized containsObject:key]?@"supported":@"unsupported";
+ NSArray *parameters=TFStrings(raw[@"supported_parameters"]);
+ if([parameters containsObject:@"tools"]||[parameters containsObject:@"tool_choice"])declared[@"tools"]=@"supported";
+ id effortRaw=raw[@"efforts"]?:raw[@"supported_reasoning_efforts"]?:raw[@"supported_reasoning_levels"]?:raw[@"reasoning_effort_values"]?:caps[@"reasoning_effort"]?:TFDict(raw[@"reasoning"])[@"levels"];
+ NSMutableArray *effortNames=[NSMutableArray new];
+ if([effortRaw isKindOfClass:NSArray.class])for(id value in effortRaw){id name=[value isKindOfClass:NSDictionary.class]?(value[@"effort"]?:value[@"id"]):value;if([name isKindOfClass:NSString.class]&&effortNames.count<32)[effortNames addObject:name];}
+ NSString *control=[@[@"fixed",@"toggle",@"budget",@"effort"] containsObject:raw[@"reasoningControl"]?:@""]?raw[@"reasoningControl"]:nil;
+ if([raw[@"reasoning_options"] isKindOfClass:NSArray.class]){
+  control=@"fixed";
+  for(id opt in raw[@"reasoning_options"]){if(![opt isKindOfClass:NSDictionary.class])continue;
+   if([opt[@"type"] isEqual:@"effort"]&&[opt[@"values"] isKindOfClass:NSArray.class]){[effortNames addObjectsFromArray:TFStrings(opt[@"values"])];control=@"effort";}
+   else if([opt[@"type"] isEqual:@"toggle"]&&![control isEqual:@"effort"])control=@"toggle";
+   else if([opt[@"type"] isEqual:@"budget_tokens"]&&[control isEqual:@"fixed"])control=@"budget";
+  }
+ }
+ NSArray *efforts=TFStrings(effortNames);NSMutableArray *valid=[NSMutableArray new];
+ for(NSString *level in @[@"none",@"minimal",@"low",@"medium",@"high",@"xhigh",@"ultra",@"max",@"enabled"])if([efforts containsObject:level])[valid addObject:level];
  NSString *wire=[raw[@"thinkingWire"] isKindOfClass:NSString.class]?raw[@"thinkingWire"]:[raw[@"reasoning_wire"] isKindOfClass:NSString.class]?raw[@"reasoning_wire"]:nil;
- if(!wire)for(NSString *parameter in @[@"reasoning_effort",@"enable_thinking",@"thinking",@"chat_template_kwargs"])if([parameters containsObject:parameter]){wire=parameter;break;}
- if(valid.count||wire)declared[@"thinking"]=@"supported";
- NSMutableDictionary *out=[NSMutableDictionary new];if(declared.count)out[@"capabilities"]=declared;if(valid.count)out[@"efforts"]=valid;
- if(wire&&[TFAIThinkingWires(@"chat") containsObject:wire])out[@"thinkingWire"]=wire;
+ if(!wire)for(NSString *parameter in @[@"reasoning_effort",@"reasoning",@"enable_thinking",@"thinking",@"chat_template_kwargs"])if([parameters containsObject:parameter]){wire=parameter;break;}
+ if(valid.count||wire||([control length]&&![control isEqual:@"fixed"]))declared[@"thinking"]=@"supported";
+ NSMutableDictionary *out=[NSMutableDictionary new];if(declared.count)out[@"capabilities"]=declared;if(valid.count)out[@"efforts"]=valid;if(control)out[@"reasoningControl"]=control;
+ NSArray *wires=[[TFAIThinkingWires(@"chat") arrayByAddingObjectsFromArray:TFAIThinkingWires(@"anthropic")] arrayByAddingObjectsFromArray:TFAIThinkingWires(@"gemini")];
+ if(wire&&[wires containsObject:wire])out[@"thinkingWire"]=wire;
  return out;
 }
 NSDictionary *TFAIModelMetadata(NSDictionary *c){
@@ -43,6 +73,18 @@ NSDictionary *TFAIModelMetadata(NSDictionary *c){
  NSDictionary *map=TFDict(c[@"modelMetadata"]);id row=map[c[@"model"]?:@""];
  if(!row&&[TFAIWireProtocol(c[@"protocol"]?:@"chat") isEqual:@"gemini"])row=map[[@"models/" stringByAppendingString:c[@"model"]?:@""]];
  return TFDict(row);
+}
+static NSString *TFCatalogKey(NSString *model){
+ NSString *key=TFAINormalizedModelID(model);return [[key stringByReplacingOccurrencesOfString:@"." withString:@"-"] stringByReplacingOccurrencesOfString:@"_" withString:@"-"];
+}
+NSDictionary *TFAICatalogModelMetadata(NSDictionary *c){
+ static NSDictionary *catalog;static dispatch_once_t once;dispatch_once(&once,^{catalog=Catalog(@"ModelCapabilities");});
+ NSString *host=[NSURL URLWithString:c[@"baseURL"]?:@""].host.lowercaseString?:@"",*key=TFCatalogKey(c[@"model"]);
+ for(NSDictionary *provider in catalog[@"providers"])if([provider[@"hosts"] containsObject:host]){
+  NSDictionary *row=TFDict(provider[@"models"])[key];if(row){NSMutableDictionary *out=[row mutableCopy];out[@"authoritative"]=@YES;out[@"source"]=@"内置目录 · 同服务声明，未实测";return out;}
+ }
+ NSDictionary *row=TFDict(catalog[@"fallback"])[key];if(!row)return @{};
+ NSMutableDictionary *out=[row mutableCopy];out[@"authoritative"]=@NO;out[@"source"]=@"内置目录 · 跨服务参考，未实测";return out;
 }
 NSArray<NSString *> *TFAIThinkingWires(NSString *protocol){
  NSString *wire=TFAIWireProtocol(protocol?:@"chat");
@@ -68,14 +110,21 @@ NSArray<NSDictionary *> *TFAIFamilyReasoningOptions(NSDictionary *c){
 NSDictionary *TFAIResolvedCapability(NSDictionary *c,NSString *key){
  NSDictionary *manual=TFDict(TFDict(c[@"capabilityOverrides"])[TFAICapabilityScope(c)]);NSString *setting=manual[key];
  if([@[@"supported",@"unsupported"] containsObject:setting?:@""])return @{@"state":setting,@"source":@"当前模型手动配置"};
- if([TFDict(c[@"capabilities"])[key] isEqual:@"supported"])return @{@"state":@"supported",@"source":@"实际响应已验证"};
+ BOOL sameScope=!c[@"capabilitiesScope"]||[c[@"capabilitiesScope"] isEqual:TFAICapabilityScope(c)];
+ if(sameScope&&[TFDict(c[@"capabilities"])[key] isEqual:@"supported"])return @{@"state":@"supported",@"source":@"实际响应已验证"};
  NSString *declared=TFDict(TFAIModelMetadata(c)[@"capabilities"])[key];if(declared)return @{@"state":declared,@"source":@"当前服务模型列表声明，未实测"};
+ NSDictionary *catalog=TFAICatalogModelMetadata(c);NSString *state=catalog[@"capabilities"][key];
+ if([state isEqual:@"supported"]||([catalog[@"authoritative"] boolValue]&&[state isEqual:@"unsupported"]))return @{@"state":state,@"source":catalog[@"source"]};
  NSString *model=TFAINormalizedModelID(c[@"model"]);BOOL known=NO;
- if([key isEqual:@"image"])known=[model rangeOfString:@"^(gpt-(4o|4\\.1|5|6)|claude-(3|sonnet-4|opus-4|haiku-4|opus-5)|gemini-(2|3))" options:NSRegularExpressionSearch].location!=NSNotFound;
- if([key isEqual:@"tools"])known=[model rangeOfString:@"^(gpt-(4o|4\\.1|5|6)|o[34]|claude-|gemini-(2|3)|deepseek-|qwen3|glm-4|kimi-k2)" options:NSRegularExpressionSearch].location!=NSNotFound;
+ if([key isEqual:@"image"])known=[model rangeOfString:@"^(gpt-(4o|4\\.1|5|6)|claude-(3|sonnet-4|opus-4|haiku-4|opus-5)|gemini-(2|3)|qwen.*-vl|glm-.*v|kimi-k2\\.5)" options:NSRegularExpressionSearch].location!=NSNotFound;
+ if([key isEqual:@"tools"])known=[model rangeOfString:@"^(gpt-(4o|4\\.1|5|6)|o[34]|claude-|gemini-(2|3)|deepseek-|qwen3|glm-[45]|kimi-k2)" options:NSRegularExpressionSearch].location!=NSNotFound;
  if(known)return @{@"state":@"supported",@"source":@"模型族建议，当前服务尚未实测"};
- return @{@"state":@"unknown",@"source":@"尚未证实；历史失败不作为禁用依据"};
+ return @{@"state":@"unknown",@"source":@"服务未声明；无需预先测试"};
 }
 BOOL TFAIToolsAllowed(NSDictionary *c){return (!c[@"toolsEnabled"]||[c[@"toolsEnabled"] boolValue])&&![TFAIResolvedCapability(c,@"tools")[@"state"] isEqual:@"unsupported"];}
-NSDictionary *TFAIObservedCapabilities(NSDictionary *c){NSMutableDictionary *out=[NSMutableDictionary new];for(NSString *k in @[@"text",@"stream",@"image",@"tools",@"thinking"]){NSString *s=c[@"capabilities"][k];out[k]=[s isEqual:@"supported"]?s:@"unknown";}return out;}
-NSString *TFAIConnectionCaption(NSDictionary *c){NSDictionary *caps=TFAIObservedCapabilities(c);NSMutableArray *verified=[NSMutableArray new];for(NSString *k in @[@"text",@"stream",@"image",@"tools"]){NSString *state=caps[k];if(![state isEqual:@"unknown"])[verified addObject:[NSString stringWithFormat:@"%@%@",@{@"text":@"文本",@"stream":@"流式",@"image":@"图片",@"tools":@"工具"}[k],[state isEqual:@"supported"]?@"✓":@"×"]];}return [NSString stringWithFormat:@"%@ · %@ · %@",TFAIProvider(c[@"protocol"])[@"name"]?:c[@"name"]?:@"未选服务商",c[@"model"]?:@"未选模型",verified.count?[[@"实测：" stringByAppendingString:[verified componentsJoinedByString:@"/"]] stringByAppendingString:@" · 其余unknown"]:@"能力 unknown"];}
+BOOL TFAIImagesAllowed(NSDictionary *c){return ![TFAIResolvedCapability(c,@"image")[@"state"] isEqual:@"unsupported"];}
+NSDictionary *TFAIObservedCapabilities(NSDictionary *c){NSMutableDictionary *out=[NSMutableDictionary new];BOOL sameScope=!c[@"capabilitiesScope"]||[c[@"capabilitiesScope"] isEqual:TFAICapabilityScope(c)];for(NSString *k in @[@"text",@"stream",@"image",@"tools",@"thinking"]){NSString *s=c[@"capabilities"][k];out[k]=sameScope&&[s isEqual:@"supported"]?s:@"unknown";}return out;}
+NSString *TFAIConnectionCaption(NSDictionary *c){
+ NSMutableArray *available=[NSMutableArray new];for(NSString *key in @[@"text",@"stream",@"image",@"tools"]){NSDictionary *r=TFAIResolvedCapability(c,key);if([r[@"state"] isEqual:@"supported"])[available addObject:@{@"text":@"文本",@"stream":@"流式",@"image":@"图片",@"tools":@"工具"}[key]];}
+ return [NSString stringWithFormat:@"%@ · %@ · %@",TFAIProvider(c[@"protocol"])[@"name"]?:c[@"name"]?:@"未选服务商",c[@"model"]?:@"未选模型",available.count?[available componentsJoinedByString:@"/"]:@"未声明能力可直接尝试，无需先测试"];
+}

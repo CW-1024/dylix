@@ -1,3 +1,4 @@
+#import "DocumentPresentation.h"
 #import "AI/Resources/DXAppUpdate.h"
 #import "AI/Backup/DXBackup.h"
 #import "AI/Agent/TFAIBuildCheckpoint.h"
@@ -154,6 +155,9 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
 #import "GitUI.h"
 
 // App-owned Documents needs no File Provider hand-off. Browse it directly.
+#if TARGET_OS_SIMULATOR
+extern UIViewController *TMCStorageBackup258Regression(void);
+#endif
 @interface TMCLocalFolders : UITableViewController
 @property NSString *directory;
 @property NSString *boundary;
@@ -574,6 +578,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
     NSString *build = self.lastBuild;
     NSError *directoryError=nil;if(![NSFileManager.defaultManager createDirectoryAtPath:build withIntermediateDirectories:YES attributes:nil error:&directoryError]){self.hasBuilt=NO;TMCBuildRunning=NO;TFScreenAwakeSet(@"build",NO);self.console.text=[@"创建构建目录失败：" stringByAppendingString:directoryError.localizedDescription];if(self.buildCompletion)self.buildCompletion(NO);return;}
     NSDictionary *running=@{@"startedAt":@(NSDate.date.timeIntervalSince1970)};[[NSJSONSerialization dataWithJSONObject:running options:0 error:nil] writeToFile:[build stringByAppendingPathComponent:@".build-in-progress.json"] atomically:YES];
+    TMCDocumentHide(build);
     NSString *globalDebPattern=[NSUserDefaults.standardUserDefaults stringForKey:@"StudioOutputPattern-deb"]?:TMCDefaultOutputPattern(@"deb");
     NSString *globalDylibPattern=[NSUserDefaults.standardUserDefaults stringForKey:@"StudioOutputPattern-dylib"]?:TMCDefaultOutputPattern(@"dylib");
     NSTimeInterval startedAt=NSDate.date.timeIntervalSince1970;
@@ -842,6 +847,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         fflush(log);
         NSString *text = [NSString stringWithContentsOfFile:logPath encoding:NSUTF8StringEncoding error:nil] ?: @"No log";
         fclose(input); fclose(log);
+        TMCDocumentPublishBuild(documents,build,nil);
         dispatch_async(dispatch_get_main_queue(), ^{
             TFScreenAwakeSet(@"build",NO);
             self.console.text = [NSString stringWithFormat:@"%@ · %lu 个源码\n日志与产物已保存，可导出完整文件。", [report[@"success"] boolValue] ? @"构建成功" : @"构建失败", (unsigned long)projectSources.count];
@@ -890,6 +896,7 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
     self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
     self.window.tintColor=[UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *trait){return trait.userInterfaceStyle==UIUserInterfaceStyleDark?[UIColor colorWithRed:.93 green:.77 blue:.52 alpha:1]:[UIColor colorWithRed:.45 green:.30 blue:.10 alpha:1];}];
     NSString *documents=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY,0),^{TMCPrepareDocumentPresentation(documents);});
     for(NSString *name in @[@"import.log",@"picker-test.json"])[NSFileManager.defaultManager removeItemAtPath:[documents stringByAppendingPathComponent:name] error:nil];
     // Only unreported builds from earlier processes are marked interrupted.
     for(NSString *entry in [NSFileManager.defaultManager contentsOfDirectoryAtPath:documents error:nil])if([entry hasPrefix:@"Build-"]){NSString *path=[documents stringByAppendingPathComponent:entry],*marker=[path stringByAppendingPathComponent:@".build-in-progress.json"],*report=[path stringByAppendingPathComponent:@"report.json"];if([NSFileManager.defaultManager fileExistsAtPath:marker]&&![NSFileManager.defaultManager fileExistsAtPath:report]){NSDictionary *interrupted=@{@"success":@NO,@"commands":@[],@"interrupted":@YES,@"packageError":@"上次构建被系统或应用退出中断，请重新构建。原始日志已保留。"};[[NSJSONSerialization dataWithJSONObject:interrupted options:0 error:nil] writeToFile:report atomically:YES];}}
@@ -946,6 +953,8 @@ static NSArray<NSString *> *sourcePaths(NSString *root) {
         self.window.rootViewController=[[TMCNavigationController alloc] initWithRootViewController:TFAIIntegrationRegression()];
     else if([NSProcessInfo.processInfo.arguments containsObject:@"--maintenance-test"])
         self.window.rootViewController=[[TMCNavigationController alloc] initWithRootViewController:TMCMaintenanceRegression()];
+    else if([NSProcessInfo.processInfo.arguments containsObject:@"--storage258-test"])
+        self.window.rootViewController=TMCStorageBackup258Regression();
     else if([NSProcessInfo.processInfo.arguments containsObject:@"--storage-test"])
         self.window.rootViewController=[[TMCNavigationController alloc] initWithRootViewController:TMCStorageController()];
     else if([NSProcessInfo.processInfo.arguments containsObject:@"--settings-test"])

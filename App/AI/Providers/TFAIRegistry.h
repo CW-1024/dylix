@@ -15,3 +15,7 @@ NSDictionary *TFAIResolvedCapability(NSDictionary *connection,NSString *capabili
 BOOL TFAIToolsAllowed(NSDictionary *connection);
 NSArray<NSString *> *TFAIThinkingWires(NSString *protocol);
 NSArray<NSString *> *TFAIThinkingLevelsForWire(NSString *wire);
+
+// Unknown is permitted to try; diagnostics never grant or revoke tool permissions.
+BOOL TFAIImagesAllowed(NSDictionary *connection);
+NSDictionary *TFAICatalogModelMetadata(NSDictionary *connection);

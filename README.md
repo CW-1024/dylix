@@ -12,9 +12,9 @@ iPhone / iPad 本机构建 · AI 开发助手 · 项目与 Git · 二进制工�
 
 </div>
 
-当前版本：**1.1.1（225）**，配套 **FLEX 插件 1.0.2**。新增逐连接自定义 HTTP Headers（值存钥匙串）及“仅允许局域网 HTTP”设置。内置 11 项按需加载的插件开发与逆向技能；MCP 支持查询与经确认的设备交互、设置页选择会话；FLEX 日志支持大文件分页及末尾读取，默认 128 KiB、单次最高 512 KiB。远程连接仅支持 Wi-Fi 局域网和仅本机模式，已移除 Tailscale 与互联网中继；保留会话 Linux 终端、AI 持续进程、官方离线开发工具、网页预览及此前边界修复。使用方法见 [局域网与本机连接](docs/REMOTE_LOCAL.md)。
+当前版本：**1.1.2（264）**，配套 **FLEX 插件 1.0.3**。开源版包含全局持久工具、按需资源安装、模型能力与深度思考适配、挂载附件、分类加密备份、存储清理优化及支持忽略版本的更新提醒。
 
-[1.1.1 更新内容](docs/RELEASE_1.1.1.md) · [服务商与 Agent](docs/AGENT_EXTENSIONS.md) · [FLEX 联动](docs/FLEX_DYLIX_BRIDGE.md) · [连接传输](docs/CONNECTION_TRANSPORT.md)。
+[1.1.2 更新内容](docs/RELEASE_1.1.2.md) · [服务商与 Agent](docs/AGENT_EXTENSIONS.md) · [FLEX 联动](docs/FLEX_DYLIX_BRIDGE.md) · [连接传输](docs/CONNECTION_TRANSPORT.md)。
 
 ## 这是什么
 
@@ -111,7 +111,7 @@ rustup target add aarch64-apple-ios x86_64-apple-ios
 python3 scripts/build.py --sdk-root LocalSDKs/iPhoneOS26.0.sdk
 ```
 
-输出 `build/Dylix-1.1.1-build225-unsigned.ipa`。安装前使用自己的证书/适用安装方式处理主 App、Share Extension 和嵌套 framework 签名。仓库不包含个人证书、描述文件或共享 API 密钥。
+输出 `build/Dylix-1.1.2-build264-opensource-unsigned.ipa`。安装前使用自己的证书/适用安装方式处理主 App、Share Extension 和嵌套 framework 签名。仓库不包含个人证书、描述文件或共享 API 密钥。
 
 设备版默认要求 SDK26+；旧 Xcode 可通过 `DYLIX_SDK_26_0` 指向完整 SDK26 目录，缺失时停止构建。
 

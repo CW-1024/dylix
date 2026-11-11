@@ -9,6 +9,13 @@
 #import <sys/stat.h>
 #import <fcntl.h>
 #import <unistd.h>
+#import <fts.h>
+#import <errno.h>
+static NSDictionary *BackupPasswordQuery(void){return @{(__bridge id)kSecClass:(__bridge id)kSecClassGenericPassword,(__bridge id)kSecAttrService:@"com.xuegao.dylix.backup.password.v1",(__bridge id)kSecAttrAccount:@"default"};}
+NSString *DXBackupRememberedPassword(void){NSMutableDictionary *q=[BackupPasswordQuery() mutableCopy];q[(__bridge id)kSecReturnData]=@YES;q[(__bridge id)kSecMatchLimit]=(__bridge id)kSecMatchLimitOne;CFTypeRef value=NULL;OSStatus status=SecItemCopyMatching((__bridge CFDictionaryRef)q,&value);if(status!=errSecSuccess)return @"";NSData *data=CFBridgingRelease(value);return [[NSString alloc]initWithData:data encoding:NSUTF8StringEncoding]?:@"";}
+BOOL DXBackupSavePassword(NSString *password,NSError **error){NSDictionary *q=BackupPasswordQuery();OSStatus status;if(!password.length){status=SecItemDelete((__bridge CFDictionaryRef)q);if(status==errSecItemNotFound)status=errSecSuccess;}else{NSData *data=[password dataUsingEncoding:NSUTF8StringEncoding];status=SecItemUpdate((__bridge CFDictionaryRef)q,(__bridge CFDictionaryRef)@{(__bridge id)kSecValueData:data});if(status==errSecItemNotFound){NSMutableDictionary *add=[q mutableCopy];add[(__bridge id)kSecValueData]=data;add[(__bridge id)kSecAttrAccessible]=(__bridge id)kSecAttrAccessibleWhenUnlockedThisDeviceOnly;status=SecItemAdd((__bridge CFDictionaryRef)add,NULL);}}
+ if(status!=errSecSuccess&&error)*error=[NSError errorWithDomain:@"Dylix.Backup.Keychain" code:status userInfo:@{NSLocalizedDescriptionKey:@"备份密码未能保存到钥匙串；本次仍可备份，下次需重新输入。"}];return status==errSecSuccess;
+}
 static NSError *Failure(NSString *s){return [NSError errorWithDomain:@"Dylix.Backup" code:1 userInfo:@{NSLocalizedDescriptionKey:s}];}
 static BOOL Fail(NSError **error,NSString *s){if(error)*error=Failure(s);return NO;}
 static BOOL Is(id value,Class cls){return [value isKindOfClass:cls];}
@@ -21,7 +28,7 @@ static BOOL Safe(NSString *path){if(!Is(path,NSString.class)||!path.length||path
 static BOOL Plain(NSString *path){return [path isEqual:path.stringByStandardizingPath.stringByResolvingSymlinksInPath];}
 static NSString *Digest(NSString *path,NSProgress *progress){int fd=open(path.fileSystemRepresentation,O_RDONLY|O_NOFOLLOW);if(fd<0)return nil;CC_SHA256_CTX c;CC_SHA256_Init(&c);uint8_t b[65536];ssize_t n=0;while(!progress.cancelled&&(n=read(fd,b,sizeof(b)))>0)CC_SHA256_Update(&c,b,(CC_LONG)n);close(fd);if(n<0||progress.cancelled)return nil;unsigned char hash[32];CC_SHA256_Final(hash,&c);NSMutableString *hex=[NSMutableString new];for(int i=0;i<32;i++)[hex appendFormat:@"%02x",hash[i]];return hex;}
 NSArray *DXBackupCategories(void){return @[@{@"id":@"projects",@"name":@"项目",@"detail":@"源码、配置、Git 历史与项目技能/记忆"},@{@"id":@"chats",@"name":@"会话",@"detail":@"聊天记录、工具历史与会话索引"},@{@"id":@"files",@"name":@"共享文件与附件",@"detail":@"附件副本、IPA 原文件、解包内容与头文件"},@{@"id":@"skills",@"name":@"技能与记忆",@"detail":@"全局技能、记忆、提示词与人设；项目技能随项目备份"},@{@"id":@"providers",@"name":@"供应商与模型",@"detail":@"连接、模型选择与参数配置"},@{@"id":@"mcp",@"name":@"MCP",@"detail":@"服务器配置；恢复后重新连接并授权工具"},@{@"id":@"settings",@"name":@"软件设置",@"detail":@"外观、编辑器、上下文等偏好；不迁移设备授权"}];}
-static NSDictionary *Roots(void){return @{@"projects":@[@"Documents/Projects"],@"chats":@[@"Library/Application Support/TweakForgeAI/Sessions"],@"files":@[@"Library/Application Support/TweakForgeAI/Attachments",@"Library/Application Support/TweakForgeAI/Binaries",@"Library/Application Support/TweakForgeAI/DirectoryGrants",@"Documents/AIClassDumpInputs",@"Documents/AttachmentArchives",@"Documents/ClassDumpExports",@"Documents/DylixLinuxExports"],@"skills":@[@"Library/Application Support/Dylix/Agent",@"Library/Application Support/DylixPersona"],@"mcp":@[@"Library/Application Support/DylixAgent/mcp.json"]};}
+static NSDictionary *Roots(void){return @{@"projects":@[@"Documents/Projects"],@"chats":@[@"Library/Application Support/TweakForgeAI/Sessions"],@"files":@[@"Library/Application Support/TweakForgeAI/Attachments",@"Library/Application Support/TweakForgeAI/Binaries",@"Library/Application Support/TweakForgeAI/DirectoryGrants",@"Documents/AIClassDumpInputs",@"Documents/AttachmentArchives",@"Documents/ClassDumpExports",@"Documents/DylixLinuxExports",@"Documents/接收文件",@"Documents/构建产物",@"Documents/头文件导出"],@"skills":@[@"Library/Application Support/Dylix/Agent",@"Library/Application Support/DylixPersona"],@"mcp":@[@"Library/Application Support/DylixAgent/mcp.json"]};}
 static BOOL Known(NSString *category){for(NSDictionary *c in DXBackupCategories())if([c[@"id"] isEqual:category])return YES;return NO;}
 static BOOL Allowed(NSString *category,NSString *relative){if(!Safe(relative)||!Known(category))return NO;if([relative isEqual:[@"preferences/" stringByAppendingPathComponent:[category stringByAppendingPathExtension:@"json"]]])return YES;for(NSString *root in Roots()[category])if([relative isEqual:root]||[relative hasPrefix:[root stringByAppendingString:@"/"]])return YES;if([category isEqual:@"files"]&&[[relative lastPathComponent] length]&&[relative hasPrefix:@"Documents/ClassDump-"]&&[relative.pathComponents[1] hasPrefix:@"ClassDump-"])return YES;return NO;}
 static NSString *PreferenceCategory(NSString *key){if([@[@"TFAI.Connections.v1",@"TFAI.DefaultConnection.v1",@"TFAI.ProjectConnections.v1"] containsObject:key])return @"providers";if([key hasPrefix:@"Studio"]&&![key containsString:@"Account"]&&![key containsString:@"Token"]&&![key containsString:@"Permission"])return @"settings";if([key hasPrefix:@"TFAI.Context"]||[key hasPrefix:@"TFAI.Tool"]||[key hasPrefix:@"DylixISH"]&&![key containsString:@"Remote"])return @"settings";return nil;}
@@ -59,20 +66,28 @@ static void Report(NSProgress *progress,NSString *stage,double fraction){
  [progress setUserInfoObject:stage forKey:@"DXBackupStage"];
  progress.completedUnitCount=MAX(progress.completedUnitCount,MIN(999,(int64_t)(fraction*1000)));
 }
-NSDictionary *DXBackupEstimate(NSString *home,NSSet *categories,NSError **error){
- home=home.stringByResolvingSymlinksInPath;NSFileManager *fm=NSFileManager.defaultManager;NSMutableDictionary *sizes=[NSMutableDictionary new],*counts=[NSMutableDictionary new];unsigned long long total=0,count=0;
- for(NSString *category in categories){if(!Known(category))return Fail(error,@"未知备份分类。"),nil;unsigned long long bytes=0,files=0;NSMutableArray *roots=[Roots()[category] mutableCopy]?:[NSMutableArray new];
+NSDictionary *DXBackupEstimateProgress(NSString *home,NSSet *categories,NSProgress *progress,void(^update)(NSDictionary *),NSError **error){
+ home=home.stringByResolvingSymlinksInPath;NSFileManager *fm=NSFileManager.defaultManager;NSMutableDictionary *sizes=[NSMutableDictionary new],*counts=[NSMutableDictionary new];__block unsigned long long total=0,count=0,visited=0;NSTimeInterval last=0;
+ for(NSString *category in categories)if(!Known(category))return Fail(error,@"未知备份分类。"),nil;
+ // Small categories complete first. Traversal is physical: links are never followed.
+ NSArray *order=@[@"settings",@"providers",@"mcp",@"skills",@"chats",@"projects",@"files"];
+ NSDictionary *(^snapshot)(NSString *)=^NSDictionary *(NSString *current){return @{@"bytesByCategory":sizes.copy,@"filesByCategory":counts.copy,@"bytes":@(total),@"files":@(count),@"scannedFiles":@(visited),@"scanningCategory":current?:@""};};
+ for(NSString *category in order){if(![categories containsObject:category])continue;if(progress.cancelled)return Fail(error,@"已取消备份。"),nil;unsigned long long bytes=0,files=0;NSMutableArray *roots=[Roots()[category] mutableCopy]?:[NSMutableArray new];
  if([category isEqual:@"files"])for(NSString *name in [fm contentsOfDirectoryAtPath:[home stringByAppendingPathComponent:@"Documents"] error:nil])if([name hasPrefix:@"ClassDump-"])[roots addObject:[@"Documents" stringByAppendingPathComponent:name]];
- for(NSString *root in roots){NSString *base=[home stringByAppendingPathComponent:root];if(!Plain(base))continue;NSDictionary *a=[fm attributesOfItemAtPath:base error:error];if(!a){if([fm fileExistsAtPath:base])return nil; if(error)*error=nil;continue;}
- BOOL directory=[a[NSFileType] isEqual:NSFileTypeDirectory];NSDirectoryEnumerator *enumerator=directory?[fm enumeratorAtPath:base]:nil;NSString *part=directory?enumerator.nextObject:@"";
- while(part){NSString *relative=part.length?[root stringByAppendingPathComponent:part]:root,*path=[home stringByAppendingPathComponent:relative];NSDictionary *attrs=[fm attributesOfItemAtPath:path error:nil];BOOL skip=!Plain(path)||([category isEqual:@"projects"]&&SkipProject(part));if(skip&&[attrs[NSFileType] isEqual:NSFileTypeDirectory])[enumerator skipDescendants];
- if(!skip&&[attrs[NSFileType] isEqual:NSFileTypeRegular]){BOOL include=YES;if([relative hasPrefix:@"Library/Application Support/TweakForgeAI/DirectoryGrants/"]){id grant=[NSDictionary dictionaryWithContentsOfFile:path];NSString *r=grant[@"documentsRelative"];include=Is(r,NSString.class)&&Allowed(@"files",[@"Documents" stringByAppendingPathComponent:r]);}if(include){bytes+=[attrs[NSFileSize] unsignedLongLongValue];files++;}}
- part=directory?enumerator.nextObject:nil;}
- }
- NSMutableDictionary *prefs=[NSMutableDictionary new];for(NSString *key in NSUserDefaults.standardUserDefaults.dictionaryRepresentation)if([PreferenceCategory(key) isEqual:category])prefs[key]=[NSUserDefaults.standardUserDefaults objectForKey:key];if(prefs.count){NSData *d=[NSJSONSerialization dataWithJSONObject:prefs options:0 error:error];if(!d)return nil;bytes+=d.length;files++;}
- sizes[category]=@(bytes);counts[category]=@(files);total+=bytes;count+=files;
- }return @{@"bytesByCategory":sizes,@"filesByCategory":counts,@"bytes":@(total),@"files":@(count)};
+ for(NSString *root in roots){@autoreleasepool{NSString *base=[home stringByAppendingPathComponent:root];if(!Plain(base))continue;struct stat st;if(lstat(base.fileSystemRepresentation,&st)){if(errno==ENOENT)continue;return Fail(error,@"部分备份目录无法读取，请检查目录权限后刷新。"),nil;}
+ char *paths[]={(char *)base.fileSystemRepresentation,NULL};FTS *tree=fts_open(paths,FTS_PHYSICAL|FTS_NOCHDIR,NULL);if(!tree)return Fail(error,@"无法统计备份目录，请刷新重试。"),nil;FTSENT *entry;BOOL ok=YES;
+ while((entry=fts_read(tree))){@autoreleasepool{if(progress.cancelled){ok=NO;break;}if(entry->fts_info==FTS_ERR||entry->fts_info==FTS_DNR||entry->fts_info==FTS_NS){ok=NO;break;}
+ if([category isEqual:@"projects"]&&entry->fts_level>0&&SkipProject(@(entry->fts_name))){if(entry->fts_info==FTS_D)fts_set(tree,entry,FTS_SKIP);continue;}
+ if(entry->fts_info!=FTS_F)continue;visited++;BOOL include=YES;
+ if([root hasSuffix:@"/DirectoryGrants"]){id grant=[NSDictionary dictionaryWithContentsOfFile:@(entry->fts_path)];NSString *relative=grant[@"documentsRelative"];include=Is(relative,NSString.class)&&Allowed(@"files",[@"Documents" stringByAppendingPathComponent:relative]);}
+ if(include){bytes+=MAX((off_t)0,entry->fts_statp->st_size);files++;}
+ if(update&&!(visited%256)){NSTimeInterval now=NSProcessInfo.processInfo.systemUptime;if(now-last>.2){last=now;update(snapshot(category));}}
+ }}fts_close(tree);if(!ok)return Fail(error,progress.cancelled?@"已取消备份。":@"部分备份目录无法读取，请检查目录权限后刷新。"),nil;}}
+ NSMutableDictionary *prefs=[NSMutableDictionary new];NSDictionary *allPrefs=NSUserDefaults.standardUserDefaults.dictionaryRepresentation;for(NSString *key in allPrefs)if([PreferenceCategory(key) isEqual:category])prefs[key]=allPrefs[key];if(prefs.count){NSData *data=[NSJSONSerialization dataWithJSONObject:prefs options:0 error:error];if(!data)return nil;bytes+=data.length;files++;}
+ sizes[category]=@(bytes);counts[category]=@(files);total+=bytes;count+=files;if(update)update(snapshot(category));
+ }return snapshot(nil);
 }
+NSDictionary *DXBackupEstimate(NSString *home,NSSet *categories,NSError **error){return DXBackupEstimateProgress(home,categories,nil,nil,error);}
 static BOOL CopyBackup(NSString *source,NSString *target,NSProgress *progress,unsigned long long *copied,unsigned long long total,NSError **error){
  int in=open(source.fileSystemRepresentation,O_RDONLY|O_NOFOLLOW),out=-1;BOOL ok=NO;struct stat st;
  if(in<0||fstat(in,&st)||!S_ISREG(st.st_mode)){if(in>=0)close(in);return Fail(error,@"备份源已变化。");}
@@ -81,7 +96,7 @@ static BOOL CopyBackup(NSString *source,NSString *target,NSProgress *progress,un
 }
 NSDictionary *DXBackupCreate(NSString *home,NSSet *categories,NSString *password,BOOL secrets,NSProgress *progress,NSError **error){
  home=home.stringByResolvingSymlinksInPath;if(!categories.count)return Fail(error,@"请选择至少一项备份内容。"),nil;for(id c in categories)if(!Known(c))return Fail(error,@"未知备份分类。"),nil;if(secrets&&!password.length)return Fail(error,@"包含密钥时必须启用密码加密。"),nil;
- NSDictionary *estimate=DXBackupEstimate(home,categories,error);if(!estimate)return nil;unsigned long long copied=0,sourceBytes=[estimate[@"bytes"] unsignedLongLongValue];Report(progress,@"正在扫描备份内容",0);
+ Report(progress,@"正在扫描备份内容",0);NSDictionary *estimate=DXBackupEstimateProgress(home,categories,progress,^(NSDictionary *partial){[progress setUserInfoObject:partial[@"scannedFiles"] forKey:@"DXBackupScannedFiles"];},error);if(!estimate)return nil;unsigned long long copied=0,sourceBytes=[estimate[@"bytes"] unsignedLongLongValue];
  NSString *work=[NSTemporaryDirectory() stringByAppendingPathComponent:[@"dylix-backup-" stringByAppendingString:NSUUID.UUID.UUIDString]],*tree=[work stringByAppendingPathComponent:@"tree"],*raw=[work stringByAppendingPathComponent:@"payload.tar.gz"];if(!Mkdir(tree,error))return nil;
  @try{NSMutableArray *records=[NSMutableArray new],*skipped=[NSMutableArray new];NSMutableDictionary *stats=[NSMutableDictionary new];NSFileManager *fm=NSFileManager.defaultManager;
  for(NSString *category in categories){stats[category]=@0;NSMutableArray *roots=[Roots()[category] mutableCopy]?:[NSMutableArray new];if([category isEqual:@"files"])for(NSString *name in [fm contentsOfDirectoryAtPath:[home stringByAppendingPathComponent:@"Documents"] error:nil])if([name hasPrefix:@"ClassDump-"])[roots addObject:[@"Documents" stringByAppendingPathComponent:name]];

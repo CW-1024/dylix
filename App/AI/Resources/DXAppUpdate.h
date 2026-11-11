@@ -5,6 +5,8 @@ BOOL DXAppVersionIsNewer(NSString *remote,NSString *installed);
 + (instancetype)shared;
 @property(nonatomic,readonly) NSDictionary *latestRelease;
 @property(nonatomic,readonly) BOOL checking;
+- (void)ignoreVersion:(NSString *)version;
+- (BOOL)shouldOfferRelease:(NSDictionary *)release installedVersion:(NSString *)installed manual:(BOOL)manual;
 - (void)check:(void(^)(NSDictionary *,NSError *))completion;
 @end
 #if __has_include(<UIKit/UIKit.h>)

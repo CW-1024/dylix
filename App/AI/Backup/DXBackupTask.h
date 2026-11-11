@@ -9,5 +9,7 @@ FOUNDATION_EXPORT NSNotificationName const DXBackupTaskChanged;
 @property(nonatomic,readonly) NSDictionary *result;
 @property(nonatomic,readonly) NSError *error;
 - (BOOL)start:(NSSet<NSString *> *)categories password:(NSString *)password secrets:(BOOL)secrets;
+/// Claim the terminal notification once across all backup page instances.
+- (BOOL)claimCompletionNotification;
 - (void)cancel;
 @end
