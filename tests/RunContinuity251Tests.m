@@ -34,10 +34,41 @@ int BudgetFixtureMain(){@autoreleasepool{
  for(NSNumber *alternating in @[@NO,@YES]){Replay251 *p=[Replay251 new];p.running=YES;p.messages=[NSMutableArray new];p.observations=[NSMutableDictionary new];p.observationOrder=[NSMutableArray new];p.progressEvidence=[NSMutableArray new];p.activeToolRecords=[NSMutableDictionary new];p.queuedUsers=[NSMutableArray new];p.toolStarts=[NSMutableDictionary new];__block BOOL warned=NO;end=nil;p.event=^(NSDictionary *e){if([e[@"type"] isEqual:@"status"]&&[e[@"message"] containsString:@"重复检查"])warned=YES;if([e[@"type"] isEqual:@"done"])end=e;};
  for(NSUInteger i=0;i<25&&p.running;i++){NSDictionary *c=@{@"id":[NSString stringWithFormat:@"c%lu",i],@"name":@"sandbox_files",@"arguments":@{@"path":[NSString stringWithFormat:@"/workspace/%lu",alternating.boolValue?i%3:0],@"operation":@"read"}};[p recordCall:c result:@{@"content":@"unchanged",@"duration":@(i)} error:nil index:0];}
  Check(warned&&[end[@"state"] isEqual:@"paused"],alternating.boolValue?@"alternating repeated reads warn then pause":@"same reads with changing duration warn then pause");}
+ // Rotating queries/titles and unrelated observations must not erase duplicate evidence.
+ for(NSString *variant in @[@"interleaved",@"query-churn",@"proposal-id",@"history-ref"]){
+ Replay251 *q=[Replay251 new];q.running=YES;q.messages=[NSMutableArray new];q.observations=[NSMutableDictionary new];q.observationOrder=[NSMutableArray new];q.progressEvidence=[NSMutableArray new];q.toolStarts=[NSMutableDictionary new];q.activeToolRecords=[NSMutableDictionary new];q.queuedUsers=[NSMutableArray new];end=nil;q.event=^(NSDictionary *e){if([e[@"type"] isEqual:@"done"])end=e;};
+ for(NSUInteger i=0;i<70&&q.running;i++){
+  NSString *name=@"read_file";NSDictionary *args=@{@"path":@"Tweak.xm",@"tool_title":[NSString stringWithFormat:@"check %lu",i]};NSDictionary *value=@{@"content":@"unchanged"};
+  if([variant isEqual:@"interleaved"]&&i%3==2){args=@{@"path":[NSString stringWithFormat:@"new-%lu",i]};value=@{@"content":@(i)};}
+  if([variant isEqual:@"query-churn"]){name=@"search_code";args=@{@"path":@"Tweak.xm",@"query":[NSString stringWithFormat:@"term-%lu",i]};value=@{@"matches":@[]};}
+  if([variant isEqual:@"proposal-id"]){name=@"propose_patch";args=@{@"edits":@[@{@"path":@"Tweak.xm",@"before":@"old",@"after":@"new"}]};value=@{@"proposal_id":NSUUID.UUID.UUIDString,@"previewStoredLocally":@YES,@"edit_count":@1};}
+  if([variant isEqual:@"history-ref"]){name=@"read_context";args=@{@"ref":[NSString stringWithFormat:@"result:call-%lu",i]};value=@{@"ref":args[@"ref"],@"text":@"same historical file content",@"historical":@YES,@"sha256":NSUUID.UUID.UUIDString};}
+  [q recordCall:@{@"id":[NSString stringWithFormat:@"c%lu",i],@"name":name,@"arguments":args} result:value error:nil index:0];
+ }
+ Check([end[@"state"] isEqual:@"paused"],[@"rolling guard stops " stringByAppendingString:variant]);
+ }
+ // Real continuation restores repeated history instead of giving each 'continue' a clean detector.
+ NSMutableArray *history=[NSMutableArray arrayWithObject:@{@"role":@"user",@"content":@"修复文件"}];
+ for(NSUInteger i=0;i<16;i++){NSString *identifier=[NSString stringWithFormat:@"prior-%lu",i];[history addObject:@{@"role":@"assistant",@"content":@"",@"tool_calls":@[@{@"id":identifier,@"name":@"read_file",@"arguments":@{@"path":@"Tweak.xm"}}]}];[history addObject:@{@"role":@"tool",@"tool_call_id":identifier,@"content":@"{\"text\":\"unchanged\"}"}];}
+ [history addObject:@{@"role":@"user",@"content":@"继续"}];
+ FixtureTransport=^(NSArray *m,NSArray *schemas,TFAIEvent e){stream=e;};r=Runtime251();[r send:history session:@"fixture"];
+ Check(r.stagnantCalls>=12&&r.guardCalls==0,@"continue restores recent loop evidence without tool replay");
+ Check(RunProgressContinuation(@{@"content":@"continue"})&&!RunProgressContinuation(@{@"content":@"修改方向：处理新问题"}),@"continuation recognition does not classify substantive correction as continue");
+ [r stop];
  // Novel output and live polling remain usable beyond the guard thresholds.
  Replay251 *p=[Replay251 new];p.running=YES;p.messages=[NSMutableArray new];p.observations=[NSMutableDictionary new];p.observationOrder=[NSMutableArray new];p.progressEvidence=[NSMutableArray new];p.toolStarts=[NSMutableDictionary new];p.activeToolRecords=[NSMutableDictionary new];
  for(NSUInteger i=0;i<45;i++){NSDictionary *c=@{@"id":[NSString stringWithFormat:@"n%lu",i],@"name":@"read_file",@"arguments":@{@"path":@"changing"}};[p recordCall:c result:@{@"text":@(i)} error:nil index:0];}Check(p.running&&p.stagnantCalls==0,@"45 changing observations do not impose a round cap");
  for(NSUInteger i=0;i<45;i++){NSDictionary *c=@{@"id":[NSString stringWithFormat:@"p%lu",i],@"name":@"sandbox_process_read",@"arguments":@{@"process_id":@"p"}};[p recordCall:c result:@{@"running":@YES} error:nil index:0];}Check(p.running,@"unchanged live process polling is exempt");
+ // Correct pagination and identical envelopes for unrelated files remain valid.
+ Replay251 *pages=[Replay251 new];pages.running=YES;pages.messages=[NSMutableArray new];pages.observations=[NSMutableDictionary new];pages.observationOrder=[NSMutableArray new];pages.progressEvidence=[NSMutableArray new];pages.toolStarts=[NSMutableDictionary new];pages.activeToolRecords=[NSMutableDictionary new];
+ for(NSUInteger i=0;i<90;i++){NSString *name=i<45?@"read_context":@"read_file";NSDictionary *a=i<45?@{@"ref":@"result:large-original",@"offset":@(i*4096)}:@{@"path":[NSString stringWithFormat:@"file-%lu",i]};NSDictionary *v=i<45?@{@"historical":@YES,@"text":[NSString stringWithFormat:@"page %lu",i],@"next_offset":@(i*4096+4096)}:@{@"text":@"same small header"};[pages recordCall:@{@"id":[NSString stringWithFormat:@"page-%lu",i],@"name":name,@"arguments":a} result:v error:nil index:0];}
+ Check(pages.running&&pages.stagnantCalls==0,@"90 distinct pages and identical unrelated files do not trigger loop protection");
+ for(NSUInteger i=0;i<8;i++)[pages recordCall:@{@"id":[NSString stringWithFormat:@"dup-%lu",i],@"name":@"read_file",@"arguments":@{@"path":@"changed-file"}} result:@{@"text":@"old"} error:nil index:0];
+ Check(pages.stagnantCalls>=6,@"duplicate evidence accumulated before a real edit");
+ [pages recordCall:@{@"id":@"real-edit",@"name":@"apply_approved_patch",@"arguments":@{@"proposal_id":@"approved"}} result:@{@"status":@"applied",@"files":@[@"changed-file"],@"backupID":@"backup-real"} error:nil index:0];
+ Check(pages.running&&pages.stagnantCalls==0,@"confirmed applied edit invalidates stale no-progress evidence");
+ NSDictionary *original=@{@"historical":@YES,@"text":@"original page"};NSDictionary *nested=@{@"historical":@YES,@"text":RunProgressJSON(original)};
+ Check([RunProgressOutcome(@{@"name":@"read_context"},original) isEqual:RunProgressOutcome(@{@"name":@"read_context"},nested)],@"reading a readback does not create novel evidence");
  // Resume seeds artifact handles without replaying export.
  __block NSArray *sent;FixtureTransport=^(NSArray *m,NSArray *s,TFAIEvent e){sent=m;e(@{@"type":@"text",@"text":@"交付"});e(@{@"type":@"done"});};r=Runtime251();[r send:@[@{@"role":@"user",@"content":@"task"},@{@"role":@"assistant",@"content":@"",@"tool_calls":@[@{@"id":@"exported",@"name":@"sandbox_export_file",@"arguments":@{@"path":@"/workspace/result.zip"}}]},@{@"role":@"tool",@"tool_call_id":@"exported",@"content":@"{\"export_id\":\"kept-artifact\",\"bytes\":123}"},@{@"role":@"user",@"content":@"继续"}] session:@"fixture"];
  Check(Contains251(sent,@"kept-artifact")&&r.progressEvidence.count==1,@"resume preserves protected artifact handle from original result");
