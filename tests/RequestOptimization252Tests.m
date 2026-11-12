@@ -26,5 +26,9 @@ int BudgetFixtureMain(){@autoreleasepool{
  r=Runtime252();r.event=^(NSDictionary *e){if([e[@"type"] isEqual:@"done"])last=e;};[r send:@[@{@"role":@"user",@"content":@"search source"}] session:@"fixture"];
  Check(round==3&&executions==1&&[last[@"state"] isEqual:@"completed"],@"discovery to actual execution completes with one source search");
  [defaults setObject:@"concise" forKey:@"Dylix.AI.AnswerStyle"];Check([TFAIAnswerGuidance() containsString:@"完整保留"]&&[TFAIAnswerGuidance() containsString:@"简洁"],@"concise style retains full code and evidence requirement");
+
+ // Changing outputs/progress must not rewrite the stable developer prefix.
+ __block NSMutableArray *prefixes=[NSMutableArray new];__block NSUInteger prefixRound=0;FixtureTransport=^(NSArray *messages,NSArray *schemas,TFAIEvent event){prefixRound++;NSMutableArray *system=[NSMutableArray new];for(NSDictionary *m in messages)if([m[@"role"] isEqual:@"system"])[system addObject:m[@"content"]];[prefixes addObject:system];if(prefixRound==1)event(@{@"type":@"usage",@"usage":@{@"prompt_tokens":@1000000,@"completion_tokens":@1}});if(prefixRound<3)event(@{@"type":@"tool_call",@"id":[NSString stringWithFormat:@"prefix-%lu",(unsigned long)prefixRound],@"name":@"read_file",@"arguments":@{@"path":@"Main.m"}});else event(@{@"type":@"text",@"text":@"done"});event(@{@"type":@"done"});};
+ r=Runtime252();[r send:@[@{@"role":@"user",@"content":@"Inspect and finish"}] session:@"fixture"];Check(prefixes.count==3&&[prefixes[0] isEqual:prefixes[1]]&&[prefixes[1] isEqual:prefixes[2]],@"changing outputs and old large usage leave prefix stable and next small request usable");
  [defaults removeObjectForKey:@"Dylix.AI.AnswerStyle"];[defaults removeObjectForKey:@"Dylix.AI.LazyTools"];
  NSLog(@"RequestOptimization252 runtime scenarios passed");}return 0;}

@@ -1,6 +1,6 @@
 # Local build outputs and secrets
 /build/
-/Vendor/*.xcframework/
+/Vendor/*.xcframework
 /Vendor/REipa/target/
 /.local/
 *.ipa

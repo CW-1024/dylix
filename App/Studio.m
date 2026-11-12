@@ -305,10 +305,6 @@ static NSString *RuleCatalogText(void){NSMutableString *text=[NSMutableString st
 static NSArray *ThirdPartyComponents(void){NSString *path=[NSBundle.mainBundle pathForResource:@"components" ofType:@"json" inDirectory:@"ThirdPartyNotices"];NSData *data=path?[NSData dataWithContentsOfFile:path]:nil;id json=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:nil]:nil;return [json isKindOfClass:NSArray.class]?json:@[];}
 
 @interface StudioAbout : UITableViewController
-@property NSString *feedbackDraft;
-@property NSMutableArray *feedbackPhotos;
-@property NSString *feedbackSentText;
-@property BOOL feedbackSubmitting;
 @end
 @implementation StudioAbout
 - (void)tableView:(UITableView *)table willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)path{TMCEnableLinksInView(cell);}
@@ -394,18 +390,14 @@ static NSString *OptimizationName(NSString *value){return @{@"release-speed":@"�
 
 
 @interface StudioSettings : UITableViewController
-@property NSString *feedbackDraft;
-@property NSMutableArray *feedbackPhotos;
-@property NSString *feedbackSentText;
-@property BOOL feedbackSubmitting;
 @end
 static NSArray *StudioSettingSections(void){return @[
- @{@"title":@"AI 对话",@"rows":@[@[@"ai",@"模型与连接",@"sparkles",@"服务商、模型与能力测试"],@[@"persona",@"人设与提示词",@"person.crop.square",@"本地人设与提示词合集"],@[@"answer",@"执行与回答",@"slider.horizontal.3",@"回答风格、工具加载与缓存"],@[@"usage",@"用量统计",@"chart.bar",@"按时间、会话与模型查看"]]},
+ @{@"title":@"AI 对话",@"rows":@[@[@"ai",@"模型与连接",@"sparkles",@"服务商、模型与能力测试"],@[@"persona",@"人设与提示词",@"person.crop.square",@"本地人设与提示词"],@[@"answer",@"执行与回答",@"slider.horizontal.3",@"回答风格、工具加载与缓存"],@[@"usage",@"用量统计",@"chart.bar",@"按时间、会话与模型查看"]]},
  @{@"title":@"插件开发",@"rows":@[@[@"build",@"默认构建设置",@"hammer",@"SDK、最低系统与产物"],@[@"optimization",@"优化方案",@"speedometer",@""],@[@"git",@"Git 与源代码管理",@"point.3.connected.trianglepath.dotted",@"身份、服务账号与自动存档"],@[@"remote",@"局域网远程",@"network",@"浏览器工作台与本机连接"]]},
  @{@"title":@"终端与逆向",@"rows":@[@[@"terminal",@"终端",@"terminal",@"打开独立 Linux 沙盒"],@[@"tools",@"安装工具",@"shippingbox",@"按需安装、查看状态与卸载"],@[@"headers",@"IPA 头文件导出",@"doc.text.magnifyingglass",@"本机分析与 ZIP 分享"],@[@"crash",@"离线崩溃分析",@"waveform.path.ecg",@"导入 .ips 与符号档案"]]},
  @{@"title":@"数据与工具",@"rows":@[@[@"mounts",@"挂载文件夹",@"externaldrive",@"管理外部文件夹授权"],@[@"backup",@"备份与恢复",@"archivebox",@"项目、会话、附件与软件配置"],@[@"storage",@"存储空间",@"internaldrive",@"查看占用与清理缓存"]]},
  @{@"title":@"外观与编辑器",@"rows":@[@[@"theme",@"界面外观",@"circle.lefthalf.filled",@""],@[@"font",@"代码字号",@"textformat.size",@""],@[@"tabs",@"始终显示底部导航栏",@"rectangle.bottomthird.inset.filled",@""]]},
- @{@"title":@"关于与支持",@"rows":@[@[@"about",@"关于 Dylix",@"info.circle",@"版本更新、使用说明与工具链"],@[@"feedback",@"反馈与建议",@"bubble.left.and.bubble.right",@""],@[@"telegram",@"Telegram 频道",@"paperplane",@""],@[@"website",@"官方网站",@"globe",@""],@[@"source",@"项目开源地址",@"chevron.left.forwardslash.chevron.right",@""],@[@"license",@"软件许可证",@"doc.text",@""]]}
+ @{@"title":@"关于与支持",@"rows":@[@[@"about",@"关于 Dylix",@"info.circle",@"版本更新、使用说明与工具链"],@[@"feedback",@"反馈与建议",@"bubble.left.and.bubble.right",@""],@[@"website",@"官方网站",@"globe",@""],@[@"source",@"项目开源地址",@"chevron.left.forwardslash.chevron.right",@""],@[@"license",@"软件许可证",@"doc.text",@""]]}
  ];}
 @implementation StudioSettings
 - (NSArray *)rowAt:(NSIndexPath *)i{return StudioSettingSections()[i.section][@"rows"][i.row];}

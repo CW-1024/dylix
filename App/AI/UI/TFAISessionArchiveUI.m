@@ -13,16 +13,16 @@ static void PresentExport(UIViewController *host,UIViewController *sheet,NSUInte
  }
  [host presentViewController:sheet animated:YES completion:nil];
 }
-void TFAISessionArchiveShare(UIViewController *host,NSDictionary *summary,UIView *anchor){
+static void ExportSession(UIViewController *host,NSDictionary *summary,UIView *anchor,BOOL includeAttachments){
  if([objc_getAssociatedObject(host,&ExportBusy) boolValue])return;
  NSString *scope=summary[@"storageProjectID"]?:@"general",*identifier=summary[@"id"];
  if(TFAISessionHasLiveRun(scope,identifier)){
   UIAlertController *a=[UIAlertController alertControllerWithTitle:@"会话正在运行" message:@"请等待本轮回复结束后再导出，以保留完整的消息和工具结果。" preferredStyle:UIAlertControllerStyleAlert];[a addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleCancel handler:nil]];PresentExport(host,a,0);return;
  }
  objc_setAssociatedObject(host,&ExportBusy,@YES,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
- MBProgressHUD *hud=[MBProgressHUD showHUDAddedTo:host.view animated:YES];hud.label.text=@"正在导出会话…";hud.detailsLabel.text=@"整理消息和本地附件，完成后打开分享";hud.accessibilityIdentifier=@"session-export-progress";
+ MBProgressHUD *hud=[MBProgressHUD showHUDAddedTo:host.view animated:YES];hud.label.text=@"正在导出会话…";hud.detailsLabel.text=includeAttachments?@"整理消息和本地附件，完成后打开分享":@"整理聊天、思考和执行记录，不包含附件";hud.accessibilityIdentifier=@"session-export-progress";
  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
- NSError *error=nil;NSDictionary *session=[TFAISessions loadSession:identifier project:scope];NSURL *url=TFAISessionArchiveExport(session,NSHomeDirectory(),&error);
+ NSError *error=nil;NSDictionary *session=[TFAISessions loadSession:identifier project:scope];NSURL *url=TFAISessionArchiveExportWithAttachments(session,NSHomeDirectory(),includeAttachments,&error);
  dispatch_async(dispatch_get_main_queue(),^{
   [hud hideAnimated:YES];objc_setAssociatedObject(host,&ExportBusy,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   if(url){
@@ -37,4 +37,14 @@ void TFAISessionArchiveShare(UIViewController *host,NSDictionary *summary,UIView
   }
  });
  });
+}
+
+void TFAISessionArchiveShare(UIViewController *host,NSDictionary *summary,UIView *anchor){
+ if([objc_getAssociatedObject(host,&ExportBusy) boolValue])return;
+ UIAlertController *choices=[UIAlertController alertControllerWithTitle:@"导出会话" message:@"两种方式均保留已保存的聊天、思考和工具执行记录，可重新导入 Dylix。" preferredStyle:UIAlertControllerStyleActionSheet];
+ [choices addAction:[UIAlertAction actionWithTitle:@"仅会话（不含附件）" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){ExportSession(host,summary,anchor,NO);}]];
+ [choices addAction:[UIAlertAction actionWithTitle:@"会话及附件" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){ExportSession(host,summary,anchor,YES);}]];
+ [choices addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+ UIView *source=anchor.window==host.view.window?anchor:host.view;choices.popoverPresentationController.sourceView=source;choices.popoverPresentationController.sourceRect=source==host.view?CGRectMake(CGRectGetMidX(source.bounds),CGRectGetMidY(source.bounds),1,1):source.bounds;
+ PresentExport(host,choices,0);
 }

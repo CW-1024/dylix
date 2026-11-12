@@ -9,6 +9,7 @@ static NSDictionary *Declarations(void){
    for(NSString *name in names)all[name]=@{@"name":name,@"description":[NSString stringWithFormat:@"%@ (%@; %@)",name,effect,scope],@"effect":effect,@"scope":scope,@"tier":tier,@"permissionTier":tier,@"approvalPolicy":approval,@"requiresUserApproval":@(![approval isEqual:@"none"]),@"requiresForeground":@(foreground),@"module":module,@"availability":availability};
   };
   add(@[@"read_development_guide",@"read_app_state",@"search_tools"],@"read",@"app_public_state",@"A",@"none",NO,@"core",@"always");
+  add(@[@"update_plan"],@"transcript",@"current_session_plan",@"A",@"none",NO,@"core",@"session");
   add(@[@"read_context"],@"read",@"current_session_history",@"A",@"none",NO,@"core",@"session");
   add(@[@"set_app_settings"],@"write",@"declared_app_preferences",@"A",@"existing",YES,@"core",@"always");
   add(@[@"app_action"],@"mixed",@"declared_app_actions",@"A",@"existing",NO,@"core",@"actions");
@@ -159,7 +160,7 @@ static NSString *WorkspacePreferencesKey(NSString *root){if(!root.length)return 
  if(!sent)return PreflightError(error,2,@"",@"tool_not_advertised",@"advertised",nil,@"此工具未在本轮下发，未执行。请只使用当前请求提供的工具，不要重放历史工具调用。",@"Use only currently advertised tool schemas; do not replay an old call or ask for unrelated authorization.");
  NSDictionary *issue=nil;
  if(!Validate(call[@"arguments"],sent[@"parameters"],0,@"arguments",&issue)){
-  NSString *hint=[name isEqual:@"read_context"]?@"此工具只回读当前会话原文。limit 可省略（默认 4096），或使用 1–4096 的整数；offset 从 0 开始，续读使用返回的 next_offset。":@"请按本轮工具声明修正参数后重试。";
+  NSString *hint=[name isEqual:@"read_context"]?@"此工具只回读当前会话原文。原始分页的 limit 可省略（默认 4096），或使用 1–4096 的整数；offset 从 0 开始，续读使用返回的 next_offset。文本字段模式使用 field、start_line、line_count、column，max_chars 为 1–16384 的整数；预算紧张时建议 512–1024，不能与 offset/limit 混用。":@"请按本轮工具声明修正参数后重试。";
   NSString *message=[NSString stringWithFormat:@"工具 %@ 参数不符合声明：%@ %@。未执行；这是参数校验失败，无需重新授权。%@",name,issue[@"parameter"],issue[@"message"],hint];
   return PreflightError(error,3,name,@"invalid_arguments",@"advertised",issue,message,[NSString stringWithFormat:@"Correct %@ to match the advertised schema and retry this tool only. Do not replay completed side effects or request authorization to fix an argument error. %@",issue[@"parameter"],hint]);
  }

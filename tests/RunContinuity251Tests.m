@@ -40,12 +40,12 @@ int BudgetFixtureMain(){@autoreleasepool{
  for(NSUInteger i=0;i<70&&q.running;i++){
   NSString *name=@"read_file";NSDictionary *args=@{@"path":@"Tweak.xm",@"tool_title":[NSString stringWithFormat:@"check %lu",i]};NSDictionary *value=@{@"content":@"unchanged"};
   if([variant isEqual:@"interleaved"]&&i%3==2){args=@{@"path":[NSString stringWithFormat:@"new-%lu",i]};value=@{@"content":@(i)};}
-  if([variant isEqual:@"query-churn"]){name=@"search_code";args=@{@"path":@"Tweak.xm",@"query":[NSString stringWithFormat:@"term-%lu",i]};value=@{@"matches":@[]};}
+  if([variant isEqual:@"query-churn"]){name=@"search_text";args=@{@"path":@"Tweak.xm",@"query":[NSString stringWithFormat:@"term-%lu",i]};value=@{@"matches":@[]};}
   if([variant isEqual:@"proposal-id"]){name=@"propose_patch";args=@{@"edits":@[@{@"path":@"Tweak.xm",@"before":@"old",@"after":@"new"}]};value=@{@"proposal_id":NSUUID.UUID.UUIDString,@"previewStoredLocally":@YES,@"edit_count":@1};}
   if([variant isEqual:@"history-ref"]){name=@"read_context";args=@{@"ref":[NSString stringWithFormat:@"result:call-%lu",i]};value=@{@"ref":args[@"ref"],@"text":@"same historical file content",@"historical":@YES,@"sha256":NSUUID.UUID.UUIDString};}
   [q recordCall:@{@"id":[NSString stringWithFormat:@"c%lu",i],@"name":name,@"arguments":args} result:value error:nil index:0];
  }
- Check([end[@"state"] isEqual:@"paused"],[@"rolling guard stops " stringByAppendingString:variant]);
+ if([variant isEqual:@"query-churn"])Check(q.running&&q.stagnantCalls==0,@"distinct targeted search queries are not duplicates solely because both return empty");else Check([end[@"state"] isEqual:@"paused"],[@"rolling guard stops " stringByAppendingString:variant]);
  }
  // Real continuation restores repeated history instead of giving each 'continue' a clean detector.
  NSMutableArray *history=[NSMutableArray arrayWithObject:@{@"role":@"user",@"content":@"修复文件"}];
@@ -69,9 +69,29 @@ int BudgetFixtureMain(){@autoreleasepool{
  Check(pages.running&&pages.stagnantCalls==0,@"confirmed applied edit invalidates stale no-progress evidence");
  NSDictionary *original=@{@"historical":@YES,@"text":@"original page"};NSDictionary *nested=@{@"historical":@YES,@"text":RunProgressJSON(original)};
  Check([RunProgressOutcome(@{@"name":@"read_context"},original) isEqual:RunProgressOutcome(@{@"name":@"read_context"},nested)],@"reading a readback does not create novel evidence");
+ // Pagination churn: the same numbered source lines must not be counted as new.
+ Replay251 *coverage=[Replay251 new];coverage.observations=[NSMutableDictionary new];coverage.observationOrder=[NSMutableArray new];
+ NSMutableArray *source=[NSMutableArray new];for(NSUInteger i=0;i<400;i++)[source addObject:[NSString stringWithFormat:@"line %lu",i+1]];
+ NSDictionary *(^page267)(NSUInteger,NSUInteger,NSString *)=^NSDictionary *(NSUInteger start,NSUInteger count,NSString *sha){return @{@"path":@"Stable.h",@"start_line":@(start),@"sha256":sha,@"content":[[source subarrayWithRange:NSMakeRange(start-1,count)] componentsJoinedByString:@"\n"]};};
+ NSDictionary *fileCall=@{@"name":@"read_file",@"arguments":@{@"path":@"Stable.h"}};
+ [coverage observeCall:fileCall value:page267(1,200,@"v1") count:YES];
+ for(NSUInteger i=0;i<12;i++)[coverage observeCall:@{@"name":@"read_file",@"arguments":@{@"path":@"Stable.h",@"start_line":@(i+1),@"line_count":@(180-i)}} value:page267(i+1,180-i,@"v1") count:YES];
+ Check(coverage.stagnantCalls==12,@"changing line ranges does not bypass duplicate coverage");
+ NSDictionary *write=@{@"name":@"create_file",@"arguments":@{@"path":@"New.h"}};
+ [coverage observeCall:write value:@{@"status":@"applied",@"files":@[@"New.h"]} count:YES];
+ [coverage observeCall:fileCall value:page267(1,180,@"v1") count:YES];Check(coverage.stagnantCalls==1,@"creating unrelated file preserves existing read evidence");
+ [coverage observeCall:@{@"name":@"apply_approved_patch"} value:@{@"status":@"applied",@"files":@[@"Stable.h"]} count:YES];
+ [coverage observeCall:fileCall value:page267(1,180,@"v1") count:YES];Check(coverage.stagnantCalls==0,@"successful write permits verification of changed file even with identical excerpt");
+ [coverage observeCall:fileCall value:page267(181,200,@"v1") count:YES];Check(coverage.stagnantCalls==0,@"new forward page with minor overlap is useful evidence");
+ [coverage observeCall:fileCall value:page267(1,180,@"v2") count:YES];Check(coverage.stagnantCalls==0,@"external file version change permits fresh verification");
+ [coverage observeCall:@{@"name":@"read_context",@"arguments":@{@"ref":@"result:old-file"}} value:@{@"historical":@YES,@"text":RunProgressJSON(page267(5,120,@"v1"))} count:YES];Check(coverage.stagnantCalls==1,@"historical file reread shares line coverage without erasing newer version");
  // Resume seeds artifact handles without replaying export.
  __block NSArray *sent;FixtureTransport=^(NSArray *m,NSArray *s,TFAIEvent e){sent=m;e(@{@"type":@"text",@"text":@"交付"});e(@{@"type":@"done"});};r=Runtime251();[r send:@[@{@"role":@"user",@"content":@"task"},@{@"role":@"assistant",@"content":@"",@"tool_calls":@[@{@"id":@"exported",@"name":@"sandbox_export_file",@"arguments":@{@"path":@"/workspace/result.zip"}}]},@{@"role":@"tool",@"tool_call_id":@"exported",@"content":@"{\"export_id\":\"kept-artifact\",\"bytes\":123}"},@{@"role":@"user",@"content":@"继续"}] session:@"fixture"];
  Check(Contains251(sent,@"kept-artifact")&&r.progressEvidence.count==1,@"resume preserves protected artifact handle from original result");
  NSString *replayPath=NSProcessInfo.processInfo.environment[@"DYLIX_LOOP_REPLAY_SESSION"];
- if(replayPath.length){NSDictionary *session=[NSJSONSerialization JSONObjectWithData:[NSData dataWithContentsOfFile:replayPath] options:0 error:nil];NSArray *history=session[@"messages"];Check(history.count>500,@"real exported session loaded for replay");Replay251 *p=[Replay251 new];p.running=YES;p.messages=[NSMutableArray new];p.observations=[NSMutableDictionary new];p.observationOrder=[NSMutableArray new];p.progressEvidence=[NSMutableArray new];p.toolStarts=[NSMutableDictionary new];p.activeToolRecords=[NSMutableDictionary new];p.queuedUsers=[NSMutableArray new];end=nil;p.event=^(NSDictionary *e){if([e[@"type"] isEqual:@"done"])end=e;};NSMutableDictionary *calls=[NSMutableDictionary new];for(NSUInteger i=429;i<554&&p.running;i++){NSDictionary *m=history[i];for(NSDictionary *c in m[@"tool_calls"])calls[c[@"id"]]=c;if([m[@"role"] isEqual:@"tool"]){NSDictionary *c=calls[m[@"tool_call_id"]];id v=[NSJSONSerialization JSONObjectWithData:[m[@"content"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];if(c&&[v isKindOfClass:NSDictionary.class])[p recordCall:c result:v error:nil index:0];}}Check([end[@"state"] isEqual:@"paused"],@"real exported repeated-read segment pauses before original user intervention");}
+ if(replayPath.length){NSDictionary *session=[NSJSONSerialization JSONObjectWithData:[NSData dataWithContentsOfFile:replayPath] options:0 error:nil];NSArray *history=session[@"messages"];Check(history.count>500,@"real exported session loaded for replay");
+ for(NSArray *bounds in @[@[@538,@721],@[@758,@788],@[@788,@838]]){Replay251 *p=[Replay251 new];p.running=YES;p.messages=[NSMutableArray new];p.observations=[NSMutableDictionary new];p.observationOrder=[NSMutableArray new];p.progressEvidence=[NSMutableArray new];p.toolStarts=[NSMutableDictionary new];p.activeToolRecords=[NSMutableDictionary new];p.queuedUsers=[NSMutableArray new];end=nil;p.event=^(NSDictionary *e){if([e[@"type"] isEqual:@"done"])end=e;};NSMutableDictionary *calls=[NSMutableDictionary new];NSUInteger executed=0,last=0;
+ for(NSUInteger i=0;i<[bounds[1] unsignedIntegerValue]&&p.running;i++){NSDictionary *m=history[i];for(NSDictionary *c in m[@"tool_calls"])calls[c[@"id"]]=c;if(![m[@"role"] isEqual:@"tool"])continue;NSDictionary *c=calls[m[@"tool_call_id"]];id v=[NSJSONSerialization JSONObjectWithData:[m[@"content"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];if(!c||![v isKindOfClass:NSDictionary.class])continue;if(i<[bounds[0] unsignedIntegerValue]){if(i+512>=[bounds[0] unsignedIntegerValue])[p observeCall:c value:v count:NO];continue;}[p recordCall:c result:v error:nil index:0];executed++;last=i;}
+ NSLog(@"REPLAY267 window=%@ delivered=%lu lastMessage=%lu state=%@ repeated=%lu",bounds,(unsigned long)executed,(unsigned long)last,end[@"state"]?:@"running",(unsigned long)p.stagnantCalls);Check([end[@"state"] isEqual:@"paused"],@"real repeated-read window pauses before original user intervention");}
+ }
  FixtureTransport=nil;NSLog(@"PASS RunContinuity251 runtime scenarios");}return 0;}

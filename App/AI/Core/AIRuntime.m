@@ -1,4 +1,6 @@
 #import "TFAIRequestOptimization.h"
+#import "TFAITaskPlan.h"
+#import "TFAITextLoop.h"
 #import "../Attachments/TFAIDirectoryRegistry.h"
 #import "../Agent/TFAISubtasks.h"
 #import "../Sandbox/TFAIISHPreview.h"
@@ -37,7 +39,7 @@ __attribute__((weak)) NSArray *TFAIObfuscationSchemas(void){return @[];}
 extern void TFAIChildApproval(NSDictionary *,BOOL(^)(void),void(^)(BOOL,NSArray *));
 static NSError *AIError(NSString *message) { return [NSError errorWithDomain:@"TweakForge.AI" code:1 userInfo:@{NSLocalizedDescriptionKey:message}]; }
 static NSString *ContextArtifactFallback(void) { return @"这段内容是会话内部的历史压缩索引，不是面向用户的回答。我会根据需要重新读取历史记录并核对当前项目状态；请告诉我你要确认的具体结果。"; }
-static NSArray *ContextArtifactMarkers(void){return @[@"[DYLIX_CONTEXT_OFFLOADED]",@"Historical tool batch:",@"Historical tool archive;"];}
+static NSArray *ContextArtifactMarkers(void){return @[@"[DYLIX_CONTEXT_OFFLOADED]",@"Historical tool batch:",@"Historical tool archive;",@"[DYLIX_WORKING_SET]",@"[DYLIX_RECOVERY]"];}
 static BOOL IsContextArtifact(NSString *text){for(NSString *marker in ContextArtifactMarkers())if([text containsString:marker])return YES;return NO;}
 static NSUInteger PendingContextPrefix(NSString *text){NSUInteger pending=0;for(NSString *marker in ContextArtifactMarkers())for(NSUInteger length=MIN(marker.length-1,text.length);length>pending;length--)if([text hasSuffix:[marker substringToIndex:length]]){pending=length;break;}return pending;}
 @interface TFProjectAIRuntime : NSObject <TFAIRuntimeV2>
@@ -81,6 +83,16 @@ static NSUInteger PendingContextPrefix(NSString *text){NSUInteger pending=0;for(
 @property NSMutableArray *repeatWindow;
 @property NSMutableDictionary *outcomeObservations;
 @property NSMutableArray *outcomeOrder;
+@property NSArray *lastProjectedMessages;
+@property NSUInteger requestTranscriptCount;
+@property NSMutableDictionary *observationPaths,*outcomePaths;
+@property NSMutableDictionary *readCoverage;
+@property NSMutableArray *readCoverageOrder;
+@property BOOL recoveryAttempted,recoveryNeeded;
+@property NSUInteger recoveryCount,recoveryRecoveredCount,lastRecoveryRound;
+@property NSMutableDictionary *agentDiagnostics;
+@property NSUInteger streamCheckLength;
+@property BOOL requestedRepetition;
 @property BOOL loopWarningSent,backgroundInterrupted,enteredBackground;
 
 @property NSUInteger developerPromptIndex;
@@ -101,7 +113,7 @@ static NSUInteger PendingContextPrefix(NSString *text){NSUInteger pending=0;for(
 @implementation TFProjectAIRuntime
 - (instancetype)init { if((self=[super init])){_completedCalls=[NSMutableSet new];[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(background) name:UIApplicationDidEnterBackgroundNotification object:nil];}return self; }
 - (void)dealloc { [[TFAIUsageStore shared] finish:_usageRequestID status:@"interrupted"];[[NSNotificationCenter defaultCenter] removeObserver:self];[_transport cancel];[_toolbox cancel];[_webTools cancel];[_readOnlyBrowser cancel];[_classDumpProgress cancel]; }
-- (void)checkpoint:(BOOL)durable {if(!self.checkpointRunID.length||!self.event)return;NSTimeInterval now=NSProcessInfo.processInfo.systemUptime;if(!durable&&now-self.checkpointTime<2)return;self.checkpointTime=now;NSMutableArray *transcript=[[self publicMessages] mutableCopy];if(self.response.length)[transcript addObject:@{@"role":@"assistant",@"content":[self.response copy],@"messageID":self.responseMessageID?:NSUUID.UUID.UUIDString,@"timestamp":self.responseTimestamp?:@(NSDate.date.timeIntervalSince1970)}];[transcript addObjectsFromArray:self.queuedUsers?:@[]];NSDictionary *checkpoint=@{@"schema":@1,@"runID":self.checkpointRunID,@"sequence":@(++self.checkpointSequence),@"savedAt":@(NSDate.date.timeIntervalSince1970),@"active":@(self.running),@"state":self.running?@"running":(self.checkpointState?:@"interrupted"),@"messages":transcript,@"pendingTools":self.activeToolRecords.allValues?:@[],@"rounds":@(self.rounds),@"receivedBytes":@(self.receivedBytes),@"recoveryMode":@"readOnlyReview"};self.event(@{@"type":@"checkpoint",@"checkpoint":checkpoint,@"durable":@(durable)});}
+- (void)checkpoint:(BOOL)durable {if(!self.checkpointRunID.length||!self.event)return;NSTimeInterval now=NSProcessInfo.processInfo.systemUptime;if(!durable&&now-self.checkpointTime<2)return;self.checkpointTime=now;NSMutableArray *transcript=[[self publicMessages] mutableCopy];if(self.response.length)[transcript addObject:@{@"role":@"assistant",@"content":[self.response copy],@"messageID":self.responseMessageID?:NSUUID.UUID.UUIDString,@"timestamp":self.responseTimestamp?:@(NSDate.date.timeIntervalSince1970)}];[transcript addObjectsFromArray:self.queuedUsers?:@[]];NSDictionary *checkpoint=@{@"schema":@1,@"runID":self.checkpointRunID,@"sequence":@(++self.checkpointSequence),@"savedAt":@(NSDate.date.timeIntervalSince1970),@"active":@(self.running),@"state":self.running?@"running":(self.checkpointState?:@"interrupted"),@"messages":transcript,@"pendingTools":self.activeToolRecords.allValues?:@[],@"rounds":@(self.rounds),@"receivedBytes":@(self.receivedBytes),@"agentDiagnostics":[self diagnostics],@"recoveryMode":@"readOnlyReview"};self.event(@{@"type":@"checkpoint",@"checkpoint":checkpoint,@"durable":@(durable)});}
 - (void)emit:(NSDictionary *)event {NSString *type=event[@"type"];if([type isEqual:@"tool_started"]&&event[@"id"]){if(!self.activeToolRecords)self.activeToolRecords=[NSMutableDictionary new];self.activeToolRecords[event[@"id"]]=@{@"id":event[@"id"],@"name":event[@"name"]?:@"tool",@"state":@"outcomeUnknown"};}else if([type isEqual:@"tool_result"]&&event[@"id"])[self.activeToolRecords removeObjectForKey:event[@"id"]];TFAIBackgroundUpdate(self.backgroundToken,event);if(self.event)self.event(event);if(self.running){BOOL boundary=[@[@"assistant_start",@"tool_started",@"tool_result",@"waiting_approval"] containsObject:type];if(boundary||[@[@"text",@"analysis_summary",@"tool_progress"] containsObject:type])[self checkpoint:boundary];}}
 - (NSArray *)publicMessages {NSMutableArray *a=[NSMutableArray arrayWithArray:self.compactedHistoryPrefix?:@[]];for(NSDictionary *m in self.messages)if(![m[@"role"] isEqual:@"system"])[a addObject:m];return a;}
 - (void)revokePermission:(NSString *)reason {
@@ -121,7 +133,8 @@ static NSUInteger PendingContextPrefix(NSString *text){NSUInteger pending=0;for(
  NSMutableSet *answered=[NSMutableSet new];for(NSDictionary *m in self.messages)if(m[@"tool_call_id"])[answered addObject:m[@"tool_call_id"]];
  NSMutableArray *dangling=[NSMutableArray new];for(NSDictionary *m in self.messages)for(NSDictionary *c in m[@"tool_calls"])if(![answered containsObject:c[@"id"]])[dangling addObject:c];
  for(NSDictionary *c in dangling)[self.messages addObject:@{@"role":@"tool",@"tool_call_id":c[@"id"],@"content":@"{\"state\":\"outcomeUnknown\",\"replayed\":false,\"advice\":\"Inspect live state before any further side effect.\"}"}];
- [self drainQueuedUsers];[self checkpoint:YES];
+ self.agentDiagnostics[@"terminalState"]=state?:@"unknown";self.agentDiagnostics[@"completedAfterRecovery"]=@([state isEqual:@"completed"]&&self.recoveryCount>0);
+ [self drainQueuedUsers];[self emit:@{@"type":@"agent_diagnostics",@"statistics":[self diagnostics]}];[self checkpoint:YES];
  if(message.length)[self emit:@{@"type":@"status",@"message":message}];
  [self drainChildResults];[self emit:@{@"type":@"done",@"state":state,@"message":message?:@"",@"messages":[self publicMessages],@"backgroundResumable":@(self.backgroundInterrupted&&[state isEqual:@"interrupted"])}];TFAIBackgroundEnd(self.backgroundToken,[state isEqual:@"completed"]);self.backgroundToken=nil;
 }
@@ -154,7 +167,7 @@ static NSUInteger PendingContextPrefix(NSString *text){NSUInteger pending=0;for(
 }
 - (NSArray *)candidateSchemas:(NSDictionary *)context {
  if(!TFAIToolsAllowed(self.connection))return @[];
- NSMutableArray *schemas=[NSMutableArray arrayWithObject:TFAIDevelopmentGuideSchema()];[schemas addObject:TFAIContextProjection.schema];[schemas addObjectsFromArray:TFAIActionSchemas(self.recoveryReadOnly||[self.requestMode isEqual:@"ask"])];[schemas addObjectsFromArray:TFAIAppControlSchemas(self.recoveryReadOnly||[self.requestMode isEqual:@"ask"])];
+ NSMutableArray *schemas=[NSMutableArray arrayWithObject:TFAIDevelopmentGuideSchema()];[schemas addObject:TFAIContextProjection.schema];[schemas addObject:TFAITaskPlanSchema()];[schemas addObjectsFromArray:TFAIActionSchemas(self.recoveryReadOnly||[self.requestMode isEqual:@"ask"])];[schemas addObjectsFromArray:TFAIAppControlSchemas(self.recoveryReadOnly||[self.requestMode isEqual:@"ask"])];
  if(!self.recoveryReadOnly&&[self.projectID isEqual:@"general"]){
  NSDictionary *str=@{@"type":@"string"};
  [schemas addObject:@{@"name":@"list_projects",@"description":@"List local Dylix projects with stable IDs. No writes.",@"parameters":@{@"type":@"object",@"properties":@{},@"additionalProperties":@NO}}];
@@ -190,7 +203,7 @@ if([context[@"binaryIDs"] count])[schemas addObjectsFromArray:TFAIBinarySchemas(
 - (void)send:(NSArray<NSDictionary *> *)messages session:(NSString *)sessionID {
  if(self.running){[self emit:@{@"type":@"error",@"message":@"请等待当前任务或先停止。"}];return;}
  self.loadedToolNames=nil;self.pendingFlexImage=nil;self.pendingFlexCaptureID=nil;self.currentFlexCaptureID=nil;
- self.repeatWindow=[NSMutableArray new];self.outcomeObservations=[NSMutableDictionary new];self.outcomeOrder=[NSMutableArray new];self.guardCalls=0;self.queuedUsers=[NSMutableArray new];self.observations=[NSMutableDictionary new];self.observationOrder=[NSMutableArray new];self.progressEvidence=[NSMutableArray new];self.stagnantCalls=0;self.loopWarningSent=NO;self.backgroundInterrupted=NO;self.enteredBackground=NO;self.running=YES;self.generation++;self.rounds=0;self.toolCount=0;self.receivedBytes=0;self.started=NSProcessInfo.processInfo.systemUptime;self.checkpointRunID=NSUUID.UUID.UUIDString;self.checkpointSequence=0;self.checkpointTime=0;self.checkpointState=nil;self.activeToolRecords=[NSMutableDictionary new];self.recoveryReadOnly=[messages.lastObject[@"localRecovery"] boolValue];self.compactedHistoryPrefix=@[];
+ self.recoveryAttempted=NO;self.recoveryNeeded=NO;self.recoveryCount=0;self.recoveryRecoveredCount=0;self.lastRecoveryRound=0;self.agentDiagnostics=[NSMutableDictionary new];self.lastProjectedMessages=nil;self.requestTranscriptCount=0;self.observationPaths=[NSMutableDictionary new];self.outcomePaths=[NSMutableDictionary new];self.readCoverage=[NSMutableDictionary new];self.readCoverageOrder=[NSMutableArray new];self.repeatWindow=[NSMutableArray new];self.outcomeObservations=[NSMutableDictionary new];self.outcomeOrder=[NSMutableArray new];self.guardCalls=0;self.queuedUsers=[NSMutableArray new];self.observations=[NSMutableDictionary new];self.observationOrder=[NSMutableArray new];self.progressEvidence=[NSMutableArray new];self.stagnantCalls=0;self.loopWarningSent=NO;self.backgroundInterrupted=NO;self.enteredBackground=NO;self.running=YES;self.generation++;self.rounds=0;self.toolCount=0;self.receivedBytes=0;self.started=NSProcessInfo.processInfo.systemUptime;self.checkpointRunID=NSUUID.UUID.UUIDString;self.checkpointSequence=0;self.checkpointTime=0;self.checkpointState=nil;self.activeToolRecords=[NSMutableDictionary new];self.recoveryReadOnly=[messages.lastObject[@"localRecovery"] boolValue];self.compactedHistoryPrefix=@[];
  self.attachmentReferences=[NSMutableDictionary new];for(NSDictionary *m in messages)if([m[@"role"] isEqual:@"user"]&&[m[@"localAttachmentReferences"] isKindOfClass:NSDictionary.class])[self.attachmentReferences addEntriesFromDictionary:m[@"localAttachmentReferences"]];for(NSDictionary *grant in TFAIDirectoryRegistry.entries)if([grant[@"available"] boolValue])self.attachmentReferences[[@"mount:" stringByAppendingString:grant[@"directoryGrant"]]]=grant;self.messages=[NSMutableArray new];if(![self.sessionID isEqual:sessionID])[self revokePermission:@"会话已切换，已恢复逐次批准"];self.sessionID=sessionID;[TFAIISHRuntime.shared configureProject:self.root session:sessionID];self.response=nil;if(!self.policy)self.policy=[[TFAIRuntimePolicy alloc] initWithRoot:self.root projectID:(self.workspaceToolID?:self.projectID) sessionID:sessionID];
  self.connection=[self.nextConnection copy]?:[TFAIConnections effectiveForProject:self.projectID];self.requestMode=self.recoveryReadOnly?@"ask":(self.interactionMode?:@"develop");self.toolStarts=[NSMutableDictionary new];
  self.personaSnapshot=TFAIPersonaStore.shared.snapshot;
@@ -211,8 +224,8 @@ if([context[@"binaryIDs"] count])[schemas addObjectsFromArray:TFAIBinarySchemas(
  for(NSDictionary *m in TFAIMessageMetadata(messages,nil))if([@[@"user",@"assistant",@"tool"] containsObject:m[@"role"]])[self.messages addObject:m];
  NSMutableDictionary *oldCalls=[NSMutableDictionary new];for(NSDictionary *m in self.messages){for(NSDictionary *c in m[@"tool_calls"])oldCalls[c[@"id"]?:@""]=c;if([m[@"role"] isEqual:@"tool"]){NSData *data=[m[@"content"] dataUsingEncoding:NSUTF8StringEncoding];id v=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:nil]:nil;NSDictionary *c=oldCalls[m[@"tool_call_id"]?:@""];if([v isKindOfClass:NSDictionary.class]&&c&&!v[@"error"]&&RunProgressMilestone(c,v)){[self.progressEvidence addObject:@{@"tool":c[@"name"],@"result_ref":[@"result:" stringByAppendingString:c[@"id"]],@"facts":RunProgressFacts(v)}];if(self.progressEvidence.count>8)[self.progressEvidence removeObjectAtIndex:0];}}}
  BOOL continuing=RunProgressContinuation(messages.lastObject);
- NSUInteger replayStart=self.messages.count>160?self.messages.count-160:0;
- for(NSUInteger i=replayStart;i<self.messages.count;i++){NSDictionary *m=self.messages[i];if(![m[@"role"] isEqual:@"tool"])continue;NSDictionary *c=oldCalls[m[@"tool_call_id"]?:@""];NSData *data=[m[@"content"] dataUsingEncoding:NSUTF8StringEncoding];id v=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:nil]:nil;if(c&&[v isKindOfClass:NSDictionary.class])[self observeCall:c value:v count:continuing];}
+ NSUInteger replayStart=self.messages.count>512?self.messages.count-512:0;
+ for(NSUInteger i=replayStart;i<self.messages.count;i++){NSDictionary *m=self.messages[i];if(![m[@"role"] isEqual:@"tool"])continue;NSDictionary *c=oldCalls[m[@"tool_call_id"]?:@""];NSData *data=[m[@"content"] dataUsingEncoding:NSUTF8StringEncoding];id v=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:nil]:nil;if(c&&[v isKindOfClass:NSDictionary.class]){[self observeCall:c value:v count:continuing];if(continuing&&[m[@"localAgentRecovery"] boolValue])self.recoveryAttempted=YES;if(RunProgressApplied(c,v))self.recoveryAttempted=NO;}}
  self.guardCalls=0;
  self.toolbox=[[TFAIToolbox alloc] initWithRoot:self.root projectID:(self.workspaceToolID?:self.projectID) sessionID:sessionID];self.toolbox.bridge=self.bridge;
  self.transport=[TFAITransport new];__weak typeof(self) weak=self;self.backgroundToken=TFAIBackgroundBegin(^(NSString *reason){if(weak.running){weak.backgroundInterrupted=YES;[weak finish:@"interrupted" message:reason];}});[self nextRound];
@@ -245,22 +258,54 @@ if([context[@"binaryIDs"] count])[schemas addObjectsFromArray:TFAIBinarySchemas(
   [child send:@[@{@"role":@"user",@"content":prompt,@"localAttachmentReferences":references?:@{}}] session:task[@"id"]];return ^{[child stop];};
  };
 }
+- (NSDictionary *)diagnostics {
+ NSMutableDictionary *d=[self.agentDiagnostics mutableCopy]?:[NSMutableDictionary new];d[@"schema"]=@1;d[@"contextPolicyVersion"]=@271;d[@"appBuild"]=NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"]?:@"unknown";d[@"protocol"]=[self.connection[@"protocol"] isKindOfClass:NSString.class]?self.connection[@"protocol"]:@"unknown";d[@"model"]=[self.connection[@"model"] isKindOfClass:NSString.class]?self.connection[@"model"]:@"unknown";d[@"recoveryAttempts"]=@(self.recoveryCount);d[@"recoveriesWithAppliedChange"]=@(self.recoveryRecoveredCount);d[@"rounds"]=@(self.rounds);d[@"repeatedObservations"]=@(self.stagnantCalls);return d;
+}
+- (NSDictionary *)recoveryEvidence {
+ NSMutableDictionary *calls=[NSMutableDictionary new];for(NSDictionary *m in self.messages)for(NSDictionary *c in m[@"tool_calls"])if(c[@"id"])calls[c[@"id"]]=c;
+ NSMutableArray *items=[NSMutableArray new];NSMutableSet *seen=[NSMutableSet new];NSUInteger bytes=0,allowance=MIN(24*1024,MAX(4096,TFAIContextProjection.budgetKiB*1024/10));
+ for(NSDictionary *m in self.messages.reverseObjectEnumerator){if(![m[@"role"] isEqual:@"tool"])continue;NSDictionary *c=calls[m[@"tool_call_id"]];NSString *name=c[@"name"];if(![@[@"read_context",@"read_file",@"classdump_headers",@"read_development_guide",@"read_project_config"] containsObject:name])continue;
+ NSDictionary *args=[name isEqual:@"read_context"]?c[@"arguments"]:@{@"ref":[@"result:" stringByAppendingString:c[@"id"]?:@""]};NSString *ref=args[@"ref"];if(!ref.length||[seen containsObject:ref])continue;[seen addObject:ref];
+ NSDictionary *page=nil;for(NSString *field in @[@"content",@"text",@"error",@"message"]){page=[TFAIContextProjection read:@{@"ref":ref,@"field":field,@"line_count":@100} messages:self.messages error:nil];if(page)break;}
+ if(!page)page=[TFAIContextProjection read:args messages:self.messages error:nil];NSUInteger size=[RunProgressJSON(page?:@{}) lengthOfBytesUsingEncoding:NSUTF8StringEncoding];if(page&&size+bytes<=allowance){[items addObject:page];bytes+=size;}if(items.count>=4||seen.count>=12)break;
+ }
+ NSMutableArray *failures=[NSMutableArray new];for(NSDictionary *m in self.messages.reverseObjectEnumerator){if(![m[@"role"] isEqual:@"tool"])continue;NSDictionary *v=[NSJSONSerialization JSONObjectWithData:[m[@"content"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];if(![v isKindOfClass:NSDictionary.class])continue;BOOL failed=v[@"error"]||[@[@"rejected",@"denied",@"outcomeUnknown",@"awaitingApproval"] containsObject:v[@"state"]?:@""];if(!failed)continue;NSMutableDictionary *f=[@{@"result_ref":[@"result:" stringByAppendingString:m[@"tool_call_id"]?:@""],@"tool":calls[m[@"tool_call_id"]][@"name"]?:@"unknown"} mutableCopy];for(NSString *key in @[@"state",@"error",@"status"])if([v[key] isKindOfClass:NSString.class])f[key]=[v[key] substringToIndex:MIN(512,[v[key] length])];[failures addObject:f];if(failures.count>=3)break;}
+ // Working state is bounded independently by the final request projection. It
+ // contains only recorded outcomes, never executes a model-authored plan.
+ return @{@"historical":@YES,@"evidence":items,@"recent_failures":failures,@"reason":@"repeated_observation",@"attempt":@1,@"next_step_policy":@"Follow latest user goal; use the adjacent working set task_plan/pending_proposals as unverified state, and resolve only the missing evidence or blocked action."};
+}
 - (void)nextRound {
  if(!self.running)return;[self drainQueuedUsers];[self drainChildResults];
  if(!self.running)return;
- NSArray *schemas=[self requestSchemas];self.advertisedSchemas=schemas;BOOL includeDeveloper=!self.personaSnapshot[@"includeDeveloperPrompt"]||[self.personaSnapshot[@"includeDeveloperPrompt"] boolValue];NSString *skillMetadata=(includeDeveloper&&[TFAIToolRegistry enabled:@"skills"])?[TFAIAgentContext metadata:self.root]:@"";if(self.agentContextIndex<self.messages.count){if(skillMetadata.length)self.messages[self.agentContextIndex]=@{@"role":@"system",@"content":skillMetadata};else{[self.messages removeObjectAtIndex:self.agentContextIndex];self.agentContextIndex=NSNotFound;}}else if(skillMetadata.length){self.agentContextIndex=self.developerPromptIndex+1;[self.messages insertObject:@{@"role":@"system",@"content":skillMetadata} atIndex:self.agentContextIndex];}NSMutableDictionary *environment=[self.promptEnvironment mutableCopy]?:[NSMutableDictionary new];environment[@"permission"]=@{@"preset":self.pendingWorkspacePreset?:self.policy.preset?:@"assisted",@"lifetime":@"current_session",@"expiresAt":@0};environment[@"backgroundStatus"]=TFAIBackgroundStatus();
+ NSArray *schemas=[self requestSchemas];self.advertisedSchemas=schemas;BOOL includeDeveloper=!self.personaSnapshot[@"includeDeveloperPrompt"]||[self.personaSnapshot[@"includeDeveloperPrompt"] boolValue];NSString *skillMetadata=(includeDeveloper&&[TFAIToolRegistry enabled:@"skills"])?[TFAIAgentContext metadata:self.root]:@"";if(self.agentContextIndex<self.messages.count){if(skillMetadata.length)self.messages[self.agentContextIndex]=@{@"role":@"system",@"content":skillMetadata};else{[self.messages removeObjectAtIndex:self.agentContextIndex];self.agentContextIndex=NSNotFound;}}else if(skillMetadata.length){self.agentContextIndex=self.developerPromptIndex+1;[self.messages insertObject:@{@"role":@"system",@"content":skillMetadata} atIndex:self.agentContextIndex];}NSMutableDictionary *environment=[self.promptEnvironment mutableCopy]?:[NSMutableDictionary new];environment[@"permission"]=@{@"preset":self.pendingWorkspacePreset?:self.policy.preset?:@"assisted",@"lifetime":@"current_session",@"expiresAt":@0};environment[@"backgroundStatus"]=TFAIBackgroundStatus();environment[@"contextPolicy"]=@{@"version":@271,@"textBudgetKiB":@(TFAIContextProjection.budgetKiB),@"unit":@"KiB",@"modelTokenWindowKnown":@NO};
  NSString *developerPrompt=TFAIDeveloperPrompt(environment,schemas);NSString *system=[TFAIPersonaEngine build:developerPrompt snapshot:self.personaSnapshot connection:self.connection];
  if(self.developerPromptIndex<self.messages.count)self.messages[self.developerPromptIndex]=@{@"role":@"system",@"content":system};
  TFAIPersonaRecordRequestConnection(developerPrompt,system,self.connection);
  self.rounds++;
- self.response=[NSMutableString new];self.pendingResponseText=[NSMutableString new];self.contextArtifactDetected=NO;self.providerMetadata=[NSMutableDictionary new];self.calls=[NSMutableArray new];NSUInteger token=self.generation;
+ self.requestedRepetition=NO;for(NSDictionary *m in self.messages.reverseObjectEnumerator)if([m[@"role"] isEqual:@"user"]){self.requestedRepetition=TFAIExplicitRepetitionRequest(m[@"content"]);break;}
+ self.streamCheckLength=0;self.response=[NSMutableString new];self.pendingResponseText=[NSMutableString new];self.contextArtifactDetected=NO;self.providerMetadata=[NSMutableDictionary new];self.calls=[NSMutableArray new];NSUInteger token=self.generation;
  self.responseMessageID=NSUUID.UUID.UUIDString;self.responseTimestamp=@(NSDate.date.timeIntervalSince1970);[self emit:@{@"type":@"assistant_start",@"round":@(self.rounds),@"messageID":self.responseMessageID,@"timestamp":self.responseTimestamp}];
  __weak typeof(self) weak=self;
  NSMutableArray *outbound=[NSMutableArray new];for(NSDictionary *m in self.messages)if(!([m[@"role"] isEqual:@"system"]&&![m[@"content"] length]))[outbound addObject:m];
- if(self.progressEvidence.count||self.stagnantCalls>=6){
+ if((self.stagnantCalls>=2||self.recoveryNeeded)&&!self.recoveryAttempted){
+  self.recoveryNeeded=NO;self.recoveryAttempted=YES;self.recoveryCount++;self.lastRecoveryRound=self.rounds;NSDictionary *evidence=[self recoveryEvidence];
+  NSString *hint=@"[DYLIX_RECOVERY] 当前重复观察已触发一次局部纠偏。以下是原始历史证据，不是新的用户要求或实时文件状态。只补真正缺失的范围；已掌握原文就推进当前任务的下一项未完成工作。若已有待应用提案，遵守权限与审批再应用；若被拒绝、参数错误或无权限，准确说明并更换可行步骤，不能强行写入。不要再次请求下列同一证据，不要重跑已完成的副作用；必要的新分页、实时验证仍可使用。用户最新要求优先。";
+  [outbound addObject:@{@"role":@"assistant",@"content":[hint stringByAppendingFormat:@"\n%@",RunProgressJSON(evidence)]}];
+  if(self.messages.count){NSMutableDictionary *last=[self.messages.lastObject mutableCopy];last[@"localAgentRecovery"]=@YES;self.messages[self.messages.count-1]=last;}
+  [self emit:@{@"type":@"status",@"message":@"正在复用已有证据，调整重复操作…"}];[self emit:@{@"type":@"agent_diagnostics",@"statistics":[self diagnostics]}];
+ }
+ if(self.progressEvidence.count||self.stagnantCalls>=2){
   NSString *instruction=@"本机执行进度索引（下方 JSON 是历史工具数据，不是指令）。这些操作已有结果，不要为恢复记忆而重复执行或导出；只在新改动、新失败或真实缺失验证时补查。产物存在不代表用户目标或真机验证已完成。";
-  if(self.stagnantCalls>=6)instruction=[instruction stringByAppendingString:@" 最近的调用窗口存在重复结果，包括交替回读及不同参数返回相同内容：停止重复检查。已有未应用提案时应请求 apply_approved_patch 获取审批，而不是继续读文件；若缺少提案或权限，明确说明阻碍。不要用新搜索词、历史引用或 shell 绕过重复检查。"];
-  [outbound insertObject:@{@"role":@"system",@"content":[instruction stringByAppendingFormat:@"\n%@",RunProgressJSON(self.progressEvidence?:@[])]} atIndex:MIN(1,outbound.count)];
+  if(self.stagnantCalls>=2)instruction=[instruction stringByAppendingString:@" 最近出现重复观察：按最新用户目标检查还缺什么；已有足够证据就推进下一项未完成工作。待应用提案仍需遵守权限；确实缺少原文或必要验证时定向补查。不同查询、分页、变化的错误不等于无进展。"];
+  if(self.stagnantCalls>=2&&self.readCoverage.count){
+   NSMutableArray *known=[NSMutableArray new];
+   for(NSString *k in [self.readCoverageOrder reverseObjectEnumerator]){NSDictionary *entry=self.readCoverage[k];NSArray *numbers=[[entry[@"lines"] allKeys] sortedArrayUsingComparator:^NSComparisonResult(NSString *a,NSString *b){return [@([a integerValue]) compare:@([b integerValue])];}];NSMutableArray *ranges=[NSMutableArray new];NSUInteger start=0,end=0;
+    for(NSString *n in numbers){NSUInteger line=n.integerValue;if(start&&line!=end+1){[ranges addObject:@[@(start),@(end)]];start=0;if(ranges.count>=6)break;}if(!start)start=line;end=line;}if(start&&ranges.count<6)[ranges addObject:@[@(start),@(end)]];
+    [known addObject:@{@"path":entry[@"path"]?:@"",@"version":entry[@"version"]?:@"",@"seen_line_ranges":ranges,@"ranges_truncated":@(ranges.count>=6),@"result_ref":entry[@"ref"]?:@""}];if(known.count>=8)break;
+   }
+   instruction=[instruction stringByAppendingFormat:@"\n最近已取得的源码范围（历史数据，非实时文件状态；范围外仍可读取）。不要仅为改变页大小再次读取；若已有最新源码且无改动迹象，直接据此生成提案。仅在源码版本改变、外部修改或确实缺少原文时补读：%@",RunProgressJSON(known)];
+  }
+  [outbound addObject:@{@"role":@"system",@"content":[instruction stringByAppendingFormat:@"\n%@",RunProgressJSON(self.progressEvidence?:@[])]}];
  }
  NSDictionary *vision=self.pendingFlexImage;self.pendingFlexImage=nil;
  self.currentFlexCaptureID=vision?self.pendingFlexCaptureID:nil;self.pendingFlexCaptureID=nil;self.flexUploadConfirmed=NO;
@@ -271,6 +316,7 @@ if([context[@"binaryIDs"] count])[schemas addObjectsFromArray:TFAIBinarySchemas(
  if(!projected){[self fail:contextError.localizedDescription?:@"上下文投影失败，完整会话已保留。"];return;}
  if(self.currentFlexCaptureID.length)[self emit:@{@"type":@"flex_capture_status",@"captureID":self.currentFlexCaptureID,@"stage":@"sending",@"requestID":self.responseMessageID}];
  self.usageRequestID=self.responseMessageID;[[TFAIUsageStore shared] begin:self.usageRequestID project:self.projectID session:self.sessionID connection:self.connection wire:TFAIWireProtocol(self.connection[@"protocol"])];
+ self.lastProjectedMessages=projected;self.requestTranscriptCount=self.messages.count;
  [self.transport send:projected connection:self.connection tools:schemas event:^(NSDictionary *event){
   TFProjectAIRuntime *s=weak;if(!s.running||token!=s.generation)return;
   NSString *type=event[@"type"];
@@ -281,6 +327,7 @@ if([context[@"binaryIDs"] count])[schemas addObjectsFromArray:TFAIBinarySchemas(
    NSString *text=event[@"text"]?:@"";s.receivedBytes+=[text lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
    if(s.receivedBytes>1024*1024){[s fail:@"本轮输出超过 1 MB，已停止；部分输出已保留。"];return;}
    [s.response appendString:text];[s.pendingResponseText appendString:text];
+   if(!s.requestedRepetition&&s.response.length>=s.streamCheckLength+128){s.streamCheckLength=s.response.length;NSUInteger cutoff=TFAIRepeatingProse(s.response);if(cutoff!=NSNotFound){s.agentDiagnostics[@"repeatedProseStopped"]=@YES;[s.response deleteCharactersInRange:NSMakeRange(cutoff,s.response.length-cutoff)];[s emit:@{@"type":@"agent_diagnostics",@"statistics":[s diagnostics]}];[s finish:@"paused" message:@"模型正文出现连续重复，已保留有效内容并停止本次输出；没有自动重发请求。 "];return;}}
    if(IsContextArtifact(s.response)){s.contextArtifactDetected=YES;s.pendingResponseText=[NSMutableString new];s.response=[ContextArtifactFallback() mutableCopy];[s emit:@{@"type":@"text",@"text":ContextArtifactFallback()}];return;}
    NSUInteger safe=s.pendingResponseText.length-PendingContextPrefix(s.pendingResponseText);
    if(safe){NSMutableDictionary *visible=[event mutableCopy];visible[@"text"]=[s.pendingResponseText substringToIndex:safe];[s.pendingResponseText deleteCharactersInRange:NSMakeRange(0,safe)];[s emit:visible];}
@@ -308,13 +355,14 @@ if([context[@"binaryIDs"] count])[schemas addObjectsFromArray:TFAIBinarySchemas(
  self.toolCount++;
  NSDictionary *call=self.calls[index];NSString *identifier=call[@"id"];
  if([call[@"name"] isEqual:@"binary_obfuscation_scan"]){NSMutableDictionary *rewritten=[call mutableCopy];NSMutableDictionary *arguments=[call[@"arguments"] mutableCopy]?:[NSMutableDictionary new];arguments[@"action"]=@"obfuscation_scan";rewritten[@"name"]=@"binary_inspect";rewritten[@"arguments"]=arguments;call=rewritten;self.calls[index]=call;}
- if([TFAIContextProjection containsPlaceholder:call[@"arguments"]]){[self recordCall:call result:nil error:AIError(@"工具参数含有历史上下文占位符，未执行。请先用 read_context 取回原文并重新读取当前文件，不能把占位符当源码。") index:index];return;}
+ if([TFAIContextProjection containsPlaceholder:call[@"arguments"]]){[self recordCall:call result:nil error:AIError(@"工具参数含有历史上下文占位符，未执行。使用当前可见源码；确实缺失时按字段/行范围补取原文，文件已变化才核对实时版本。不能把占位符当源码。") index:index];return;}
  NSError *preflightError=nil;if(![self preflightCall:call error:&preflightError]){[self recordCall:call result:nil error:preflightError index:index];return;}
 
  if([call[@"name"] isEqual:@"search_tools"]){if(!self.loadedToolNames)self.loadedToolNames=[NSMutableSet new];NSError *error=nil;NSDictionary *result=TFAILoadTools(call[@"arguments"],[self availableSchemas],self.loadedToolNames,&error);[self.completedCalls addObject:identifier];[self recordCall:call result:result error:error index:index];return;}
  if([self.completedCalls containsObject:identifier]){[self recordCall:call result:nil error:AIError(@"该调用 ID 已执行；为避免重复操作，本次不重放。") index:index];return;}
  NSUInteger token=self.generation;__weak typeof(self) weak=self;
- if([call[@"name"] isEqual:@"read_context"]){NSError *failure=nil;NSDictionary *result=[TFAIContextProjection read:call[@"arguments"] messages:self.messages error:&failure];[self.completedCalls addObject:identifier];[self recordCall:call result:result error:failure index:index];return;}
+ if([call[@"name"] isEqual:@"update_plan"]){NSError *failure=nil;NSMutableDictionary *result=[TFAITaskPlanResult(call[@"arguments"],&failure) mutableCopy];for(NSDictionary *m in self.messages.reverseObjectEnumerator)if([m[@"role"] isEqual:@"user"]){if(m[@"messageID"])result[@"user_message_id"]=m[@"messageID"];break;}[self.completedCalls addObject:identifier];[self recordCall:call result:result error:failure index:index];return;}
+ if([call[@"name"] isEqual:@"read_context"]){NSError *failure=nil;NSMutableArray *visible=[self.lastProjectedMessages mutableCopy]?:[NSMutableArray new];if(self.requestTranscriptCount<=self.messages.count)[visible addObjectsFromArray:[self.messages subarrayWithRange:NSMakeRange(self.requestTranscriptCount,self.messages.count-self.requestTranscriptCount)]];NSDictionary *result=[TFAIContextProjection read:call[@"arguments"] messages:self.messages visibleMessages:visible error:&failure];[self.completedCalls addObject:identifier];[self recordCall:call result:result error:failure index:index];return;}
  if([call[@"name"] isEqual:@"flex_current_context"]){NSDictionary *snapshot=[DXFlexBridge.shared contextForSession:self.sessionID];[self.completedCalls addObject:identifier];[self recordCall:call result:snapshot error:snapshot?nil:AIError(@"FLEX 现场已过期，请在目标 App 重新选择对象") index:index];return;}
  if([@[@"flex_live_read",@"flex_sensitive_read",@"flex_control"] containsObject:call[@"name"]]){
   NSDictionary *args=call[@"arguments"];NSString *operation=args[@"operation"];NSMutableDictionary *wire=[args mutableCopy];[wire removeObjectForKey:@"operation"];
@@ -426,15 +474,58 @@ if([context[@"binaryIDs"] count])[schemas addObjectsFromArray:TFAIBinarySchemas(
  NSString *name=call[@"name"]?:@"";NSDictionary *args=call[@"arguments"]?:@{};
  // Result-only matching is scoped to the same read target. Identical success
  // envelopes from unrelated writes or files must never be treated as a loop.
- BOOL read=[@[@"read_context",@"read_file",@"search_code",@"view_diff",@"read_attachment",@"classdump_headers"] containsObject:name];
- NSMutableDictionary *scope=[NSMutableDictionary new];for(NSString *field in @[@"path",@"id",@"job_id",@"action",@"operation"])if(args[field])scope[field]=args[field];
+ BOOL read=[@[@"read_context",@"read_file",@"search_code",@"search_text",@"list_files",@"read_project_config",@"read_diagnostics",@"list_symbols",@"view_diff",@"read_attachment",@"classdump_headers"] containsObject:name];
+ NSMutableDictionary *scope=[NSMutableDictionary new];for(NSString *field in @[@"path",@"id",@"job_id",@"action",@"operation",@"query",@"pattern"])if(args[field])scope[field]=args[field];
  NSString *outcomeKey=read?RunProgressDigest(@{@"name":name,@"scope":scope,@"digest":digest}):[key stringByAppendingString:digest];
- BOOL same=[self.observations[key] isEqual:digest]||self.outcomeObservations[outcomeKey]!=nil;
+ // Compare numbered source lines, not pagination envelopes. A changed page size
+ // or overlapping range is not fresh evidence when >=90% of its lines are known.
+ if(!self.observationPaths)self.observationPaths=[NSMutableDictionary new];
+ if(!self.outcomePaths)self.outcomePaths=[NSMutableDictionary new];
+ if(!self.readCoverage)self.readCoverage=[NSMutableDictionary new];
+ if(!self.readCoverageOrder)self.readCoverageOrder=[NSMutableArray new];
+ BOOL covered=NO;
+ NSDictionary *page=value;
+ if([name isEqual:@"read_context"]&&![page[@"view"] isEqual:@"field"]){for(NSUInteger i=0;i<32&&[page isKindOfClass:NSDictionary.class]&&[page[@"historical"] boolValue]&&[page[@"text"] isKindOfClass:NSString.class];i++){id decoded=[NSJSONSerialization JSONObjectWithData:[page[@"text"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];if(![decoded isKindOfClass:NSDictionary.class])break;page=decoded;}}
+ NSString *path=[page[@"path"] isKindOfClass:NSString.class]?page[@"path"]:args[@"path"];
+ NSString *text=[page[@"content"] isKindOfClass:NSString.class]?page[@"content"]:([page[@"text"] isKindOfClass:NSString.class]?page[@"text"]:nil);
+ BOOL sourcePage=([name isEqual:@"read_file"]||([name isEqual:@"classdump_headers"]&&[args[@"action"] isEqual:@"read"])||[name isEqual:@"read_context"])&&[page[@"start_line"] isKindOfClass:NSNumber.class]&&path.length&&text;
+ if(sourcePage){
+  if(page[@"source_sha256"]){NSMutableDictionary *normalized=[page mutableCopy];normalized[@"sha256"]=page[@"source_sha256"];page=normalized;}
+  NSString *family=[name isEqual:@"classdump_headers"]?@"headers":@"project";
+  NSString *scopeKey=RunProgressJSON(@[family,args[@"job_id"]?:@"",path,page[@"sha256"]?:@""]);
+  NSMutableDictionary *entry=self.readCoverage[scopeKey];NSString *version=[page[@"sha256"] isKindOfClass:NSString.class]?page[@"sha256"]:@"";
+  if(!entry||(version.length&&[entry[@"version"] length]&&![entry[@"version"] isEqual:version])){entry=[@{@"lines":[NSMutableDictionary new],@"version":version,@"path":path} mutableCopy];self.readCoverage[scopeKey]=entry;}
+  if(version.length)entry[@"version"]=version;
+  NSString *ref=[name isEqual:@"read_context"]?args[@"ref"]:([call[@"id"] length]?[@"result:" stringByAppendingString:call[@"id"]]:nil);if(ref.length)entry[@"ref"]=ref;
+  NSMutableDictionary *lines=entry[@"lines"];NSArray *parts=[text componentsSeparatedByString:@"\n"];NSUInteger start=[page[@"start_line"] unsignedIntegerValue],known=0;
+  if(start>0&&start<=1000000&&parts.count<=2000){
+   for(NSUInteger i=0;i<parts.count;i++){NSString *lineKey=[@(start+i) stringValue],*hash=RunProgressDigest(parts[i]);if([lines[lineKey] isEqual:hash])known++;}
+   covered=parts.count>0&&known*10>=parts.count*9;
+   if(lines.count+parts.count>8000)[lines removeAllObjects];
+   for(NSUInteger i=0;i<parts.count;i++)lines[[@(start+i) stringValue]]=RunProgressDigest(parts[i]);
+  }
+  [self.readCoverageOrder removeObject:scopeKey];[self.readCoverageOrder addObject:scopeKey];
+  NSUInteger storedLines=0;for(NSDictionary *row in self.readCoverage.allValues)storedLines+=[row[@"lines"] count];
+  while(storedLines>16000&&self.readCoverageOrder.count>1){NSString *old=self.readCoverageOrder.firstObject;storedLines-=[self.readCoverage[old][@"lines"] count];[self.readCoverage removeObjectForKey:old];[self.readCoverageOrder removeObjectAtIndex:0];}
+  if(self.readCoverageOrder.count>48){[self.readCoverage removeObjectForKey:self.readCoverageOrder.firstObject];[self.readCoverageOrder removeObjectAtIndex:0];}
+ }
+ BOOL same=covered||[self.observations[key] isEqual:digest]||self.outcomeObservations[outcomeKey]!=nil;
+ if([path isKindOfClass:NSString.class]){self.observationPaths[key]=path;self.outcomePaths[outcomeKey]=path;}
  self.observations[key]=digest;[self.observationOrder removeObject:key];[self.observationOrder addObject:key];
- if(self.observationOrder.count>192){[self.observations removeObjectForKey:self.observationOrder.firstObject];[self.observationOrder removeObjectAtIndex:0];}
+ if(self.observationOrder.count>192){[self.observationPaths removeObjectForKey:self.observationOrder.firstObject];[self.observations removeObjectForKey:self.observationOrder.firstObject];[self.observationOrder removeObjectAtIndex:0];}
  self.outcomeObservations[outcomeKey]=@YES;[self.outcomeOrder removeObject:outcomeKey];[self.outcomeOrder addObject:outcomeKey];
- if(self.outcomeOrder.count>192){[self.outcomeObservations removeObjectForKey:self.outcomeOrder.firstObject];[self.outcomeOrder removeObjectAtIndex:0];}
- if(count&&RunProgressApplied(call,value)){[self.repeatWindow removeAllObjects];[self.observations removeAllObjects];[self.observationOrder removeAllObjects];[self.outcomeObservations removeAllObjects];[self.outcomeOrder removeAllObjects];same=NO;}
+ if(self.outcomeOrder.count>192){[self.outcomePaths removeObjectForKey:self.outcomeOrder.firstObject];[self.outcomeObservations removeObjectForKey:self.outcomeOrder.firstObject];[self.outcomeOrder removeObjectAtIndex:0];}
+ if(RunProgressApplied(call,value)){
+  if(count)[self.repeatWindow removeAllObjects];
+  // A successful edit permits verification of edited files only. Keep evidence
+  // for unrelated files, so a small write cannot reset every repeated read.
+  NSArray *changed=[value[@"files"] isKindOfClass:NSArray.class]?value[@"files"]:@[];
+  for(NSString *k in [self.observationOrder copy])if([changed containsObject:self.observationPaths[k]]){[self.observations removeObjectForKey:k];[self.observationPaths removeObjectForKey:k];[self.observationOrder removeObject:k];}
+  for(NSString *k in [self.outcomeOrder copy])if([changed containsObject:self.outcomePaths[k]]){[self.outcomeObservations removeObjectForKey:k];[self.outcomePaths removeObjectForKey:k];[self.outcomeOrder removeObject:k];}
+  for(NSString *k in [self.readCoverageOrder copy])if([changed containsObject:self.readCoverage[k][@"path"]]){[self.readCoverage removeObjectForKey:k];[self.readCoverageOrder removeObject:k];}
+  same=NO;
+ }
+ if(count&&same){if(!self.agentDiagnostics)self.agentDiagnostics=[NSMutableDictionary new];self.agentDiagnostics[@"duplicateObservationCount"]=@([self.agentDiagnostics[@"duplicateObservationCount"] unsignedIntegerValue]+1);}
  if(count){[self.repeatWindow addObject:@(same)];if(self.repeatWindow.count>40)[self.repeatWindow removeObjectAtIndex:0];self.guardCalls++;}
  NSUInteger repeated=0;for(NSNumber *n in self.repeatWindow)repeated+=n.boolValue;
  self.stagnantCalls=repeated;
@@ -464,7 +555,12 @@ if([context[@"binaryIDs"] count])[schemas addObjectsFromArray:TFAIBinarySchemas(
  [self.messages addObject:@{@"role":@"tool",@"tool_call_id":call[@"id"],@"content":text}];
  [self emit:@{@"type":@"tool_result",@"id":call[@"id"],@"name":call[@"name"],@"result":value,@"duration":self.toolStarts[call[@"id"]]?@(MAX(0,NSProcessInfo.processInfo.systemUptime-[self.toolStarts[call[@"id"]] doubleValue])):@0}];
  if([call[@"id"] isEqual:self.pendingFlexCaptureID])[self emit:@{@"type":@"flex_capture_status",@"captureID":self.pendingFlexCaptureID,@"stage":@"captured"}];
+ if(!self.agentDiagnostics)self.agentDiagnostics=[NSMutableDictionary new];NSMutableDictionary *counts=[self.agentDiagnostics[@"toolCounts"] mutableCopy]?:[NSMutableDictionary new];NSString *tool=call[@"name"]?:@"unknown";counts[tool]=@([counts[tool] unsignedIntegerValue]+1);self.agentDiagnostics[@"toolCounts"]=counts;
+ if([tool isEqual:@"read_context"]){NSString *ref=call[@"arguments"][@"ref"];NSString *target=@"unknown";for(NSDictionary *m in self.messages)for(NSDictionary *c in m[@"tool_calls"])if([ref isEqual:[@"result:" stringByAppendingString:c[@"id"]?:@""]])target=c[@"name"]?:@"unknown";NSMutableDictionary *targets=[self.agentDiagnostics[@"historyTargetTools"] mutableCopy]?:[NSMutableDictionary new];targets[target]=@([targets[target] unsignedIntegerValue]+1);self.agentDiagnostics[@"historyTargetTools"]=targets;}
+ if([value[@"already_visible"] boolValue]){self.recoveryNeeded=YES;self.agentDiagnostics[@"visibleReuses"]=@([self.agentDiagnostics[@"visibleReuses"] unsignedIntegerValue]+1);}
  [self observeCall:call value:value count:YES];
+ if(RunProgressApplied(call,value)&&self.recoveryAttempted){self.recoveryRecoveredCount++;self.recoveryAttempted=NO;}
+ [self emit:@{@"type":@"agent_diagnostics",@"statistics":[self diagnostics]}];
  if(!error&&RunProgressMilestone(call,value)){
   NSMutableDictionary *e=[@{@"tool":call[@"name"],@"result_ref":[@"result:" stringByAppendingString:call[@"id"]],@"facts":RunProgressFacts(value)} mutableCopy];
   [self.progressEvidence addObject:e];if(self.progressEvidence.count>8)[self.progressEvidence removeObjectAtIndex:0];

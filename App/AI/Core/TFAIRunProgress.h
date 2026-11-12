@@ -8,7 +8,7 @@ static id RunProgressStable(id value){
 }
 static BOOL RunProgressPolling(NSDictionary *call,NSDictionary *value){NSString *n=call[@"name"];return [n hasPrefix:@"sandbox_process_"]||[n hasPrefix:@"flex_"]||[n isEqual:@"subtask_task"]||[n isEqual:@"read_app_state"];}
 static BOOL RunProgressApplied(NSDictionary *call,NSDictionary *value){
- if(value[@"error"]||![call[@"name"] isEqual:@"apply_approved_patch"])return NO;
+ if(value[@"error"]||![@[@"apply_approved_patch",@"create_file"] containsObject:call[@"name"]])return NO;
  return [value[@"applied"] isEqual:@YES]||([value[@"status"] isEqual:@"applied"]&&[value[@"files"] isKindOfClass:NSArray.class]&&[value[@"files"] count]>0);
 }
 static BOOL RunProgressMilestone(NSDictionary *call,NSDictionary *value){return value[@"proposal_id"]||value[@"export_id"]||value[@"artifact_id"]||value[@"build_id"]||value[@"jobID"]||RunProgressApplied(call,value)||[call[@"name"] isEqual:@"build_project"];}
